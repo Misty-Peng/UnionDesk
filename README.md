@@ -1,111 +1,122 @@
-# UnionDesk 工作区
+# UnionDesk
 
-`UnionDesk` 当前由两个核心工程组成：
+> 面向企业客户服务场景的多业务域工单平台，统一处理 **咨询**、**工单**、**反馈/建议** 三类请求。
 
-- `UnionDesk`：后端服务，负责业务域、咨询会话、工单、统计接口等能力
-- `UnionDeskWeb`：前端工作区，包含客户侧与管理端两个 React 应用
+当前仓库为 UnionDesk 的项目工作区，**尚处于启动阶段**：产品需求、系统架构、数据库设计、技术栈方案已沉淀在 `doc/`，代码仓库（`UnionDesk/` 后端、`UnionDeskWeb/` 前端）尚未初始化。本 README 用于描述当前真实状态与下一步动作；`AGENTS.md` 用于约束后续开发协作。
 
-同时保留 `doc` 目录，用于沉淀产品、架构、数据库和技术方案文档。
+---
 
-## 当前完成度
-
-目前已经具备一个可继续迭代的初步可运行版本，覆盖以下最小业务链路：
-
-- 客户侧
-  - 选择业务域
-  - 发起咨询并查看咨询历史
-  - 创建工单
-  - 查看自己的最近工单
-- 管理端
-  - 查看业务域看板统计
-  - 查看工单列表并更新状态
-  - 查看咨询会话并回复客户
-- 后端
-  - Flyway 初始化数据库
-  - 提供域、咨询、工单、看板统计等 REST API
-  - 提供本地文件日志，后续可切换到 ELK
-
-## 工作区结构
+## 1. 仓库结构
 
 ```text
 UnionDesk/
-├─ doc/                    # 中文文档
-├─ UnionDesk/              # Spring Boot 后端
-└─ UnionDeskWeb/           # React 前端工作区
+├─ AGENTS.md                # 开发协作与代码代理（Agent）指导规范
+├─ README.md                # 本文件
+├─ doc/                     # 中文设计文档
+│  ├─ PRD.md                # 产品需求文档
+│  ├─ 系统架构设计.md        # 模块化单体架构 + 演进路线
+│  ├─ 数据库设计.md          # 实体、索引、生命周期
+│  ├─ 技术栈方案.md          # 前后端、数据、日志、部署选型
+│  ├─ schema.sql            # MySQL 8 初始化 DDL
+│  └─ README.md             # 文档总览
+├─ UnionDesk/               # 后端服务工程（待初始化）
+└─ UnionDeskWeb/            # 前端工作区（待初始化，含客户端 + 管理端）
 ```
 
-## 技术栈
+## 2. 项目定位
 
-- 后端：Java 21、Spring Boot 3.4、Spring Security、MyBatis、Flyway
-- 数据库：MySQL 8.0（本地 Docker 开发环境）
-- 前端：React、TypeScript、Vite、Ant Design、pnpm workspace
-- 日志：Logback 本地滚动文件；后续接入 ELK
+- **UnionDesk**（后端）：身份认证、IAM、业务域、工单、咨询、反馈、通知、审计，统一 REST API。
+- **UnionDeskWeb**（前端）：Monorepo，包含：
+  - `apps/customer-web`：客户端（提单、查单、反馈）
+  - `apps/admin-web`：管理端（客服工作台、配置、权限）
+  - `packages/shared`：共享 API Client、类型、组件
 
-说明：
+详细职责与模块划分见 `doc/系统架构设计.md`。
 
-- 文档里曾规划 MySQL 8.4，但当前本地开发链路为了兼容 Flyway，已先落到 `MySQL 8.0`，这样能保证本地稳定启动与迁移执行。
+## 3. MVP 目标（摘自 PRD）
 
-## 快速启动
+1. 多业务域的数据与权限隔离。
+2. 每个业务域独立配置工单类型与动态字段。
+3. 打通"客户提交 → 客服处理 → 关闭"闭环。
+4. SLA 规则与超时预警。
+5. 预留知识库二期接口。
 
-### 1. 启动数据库
+## 4. 技术栈基线
+
+| 层次 | 选型 |
+|---|---|
+| 后端运行时 | Java 21+（目标 Java 25 LTS，按团队可用版本就近落地） |
+| 后端框架 | Spring Boot 3.x、Spring Security（JWT Access + Refresh） |
+| 持久层 | MyBatis（或 MyBatis-Plus） |
+| 数据库迁移 | Flyway |
+| 缓存 | Redis |
+| 异步 | RabbitMQ（评估后再引入） |
+| 数据库 | MySQL 8.x（开发先用 8.0，目标 8.4 LTS） |
+| 对象存储 | S3 协议（开发用 MinIO） |
+| 前端 | React + TypeScript + Vite + Ant Design |
+| 包管理 | pnpm workspace |
+| 日志 | ELK 优先，本地回退 Logback 滚动文件 |
+| 容器化 | Docker / docker compose |
+
+完整细节见 `doc/技术栈方案.md`。
+
+## 5. 当前完成度
+
+- [x] 产品需求文档 PRD
+- [x] 系统架构设计文档
+- [x] 数据库设计文档 + `schema.sql`
+- [x] 技术栈方案
+- [x] `AGENTS.md` 开发协作规范
+- [ ] 后端工程脚手架（Spring Boot + Flyway + MyBatis）
+- [ ] 前端 Monorepo 脚手架（pnpm + Vite + AntD）
+- [ ] 本地一键启动（docker compose + MySQL + MinIO）
+- [ ] 鉴权与 IAM 最小闭环
+- [ ] 工单核心闭环（提交 → 处理 → 关闭）
+
+## 6. 下一步路线
+
+### 阶段 0：基础设施
+1. 初始化 `UnionDesk/` Spring Boot 工程，接入 Flyway 执行 `doc/schema.sql`。
+2. 初始化 `UnionDeskWeb/` pnpm workspace，拆出 `apps/customer-web`、`apps/admin-web`、`packages/shared`。
+3. 提供 `docker-compose.yml`（MySQL 8、Redis、MinIO）。
+
+### 阶段 1：最小闭环
+1. 登录 / Token 刷新 / 基于 `business_domain_id` 的数据权限。
+2. 业务域 CRUD + 工单类型 + 动态字段配置。
+3. 客户端完成"选域 → 提单 → 查单"。
+4. 管理端完成"工单池 → 分配 → 回复 → 关闭"。
+5. 审计日志（`ticket_event_log` / `operation_log`）。
+
+### 阶段 2：增强
+1. SLA 计时与超时预警。
+2. 咨询会话与"咨询转工单"。
+3. 通知模板（站内 → 邮件/短信）。
+4. OpenAPI 驱动的前端类型化 API Client。
+
+## 7. 快速开始（占位）
+
+> 后端 / 前端工程尚未落地，以下命令将在阶段 0 完成后生效。当前请先阅读 `AGENTS.md` 与 `doc/` 下设计文档。
 
 ```powershell
-cd F:\WorkSpace\UnionDesk\UnionDesk
+# 启动依赖（MySQL / Redis / MinIO）
 docker compose up -d
-```
 
-### 2. 启动后端
-
-优先使用 Maven Wrapper：
-
-```powershell
-cd F:\WorkSpace\UnionDesk\UnionDesk
+# 后端
+cd UnionDesk
 .\mvnw.cmd spring-boot:run
-```
 
-如果你的终端已经识别 `mvn`，也可以使用：
-
-```powershell
-mvn spring-boot:run
-```
-
-### 3. 启动前端
-
-```powershell
-cd F:\WorkSpace\UnionDesk\UnionDeskWeb
+# 前端
+cd ..\UnionDeskWeb
 pnpm install
-pnpm dev:customer
-pnpm dev:admin
+pnpm -C apps/customer-web dev
+pnpm -C apps/admin-web dev
 ```
 
-默认访问地址：
+## 8. 参考
 
-- 客户侧：`http://localhost:5173`
-- 管理端：`http://localhost:5174`
-- 后端：`http://localhost:8080`
-
-## 已验证内容
-
-我已经在本地完成以下验证：
-
-- `docker compose up -d`
-- `.\mvnw.cmd test` / `mvn test`
-- `pnpm build`
-- 后端真实接口验证：
-  - `GET /api/v1/health`
-  - `GET /api/v1/domains`
-  - `GET /api/v1/dashboard`
-  - `GET /api/v1/tickets`
-  - `POST /api/v1/tickets`
-  - `POST /api/v1/consultations/messages`
-  - `GET /api/v1/consultations`
-  - `GET /api/v1/consultations/{sessionNo}/messages`
-
-## 后续建议
-
-下一阶段建议继续推进：
-
-1. 接入 JWT 登录态与基于 `business_domain_id` 的权限控制
-2. 补齐工单详情、回复、附件、反馈等完整业务流程
-3. 为前端增加自动化测试和端到端测试
-4. 将 Flyway SQL 中已提示弃用的 `VALUES()` 语法逐步替换
+- 产品需求：`doc/PRD.md`
+- 系统架构：`doc/系统架构设计.md`
+- 数据库设计：`doc/数据库设计.md`
+- 技术栈方案：`doc/技术栈方案.md`
+- 初始化 DDL：`doc/schema.sql`
+- 开发协作规范：`AGENTS.md`
