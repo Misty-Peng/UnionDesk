@@ -1,0 +1,10 @@
+{
+  "name": "@uniondesk/shared",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "echo \"shared build\"",
+    "lint": "echo \"shared lint\"",
+    "typecheck": "echo \"shared typecheck\""
+  }
+}
