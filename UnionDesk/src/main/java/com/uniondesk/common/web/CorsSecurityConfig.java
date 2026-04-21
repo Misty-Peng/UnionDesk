@@ -33,10 +33,14 @@ public class CorsSecurityConfig {
                     response.setStatus(401);
                     response.setContentType(MediaType.APPLICATION_JSON_VALUE);
                     new ObjectMapper().writeValue(response.getWriter(), ApiResponse.error("UNAUTHORIZED", "unauthorized"));
+                }).accessDeniedHandler((request, response, accessDeniedException) -> {
+                    response.setStatus(403);
+                    response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+                    new ObjectMapper().writeValue(response.getWriter(), ApiResponse.error("FORBIDDEN", "forbidden"));
                 }))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                        .requestMatchers("/api/v1/auth/login", "/api/v1/health", "/actuator/health", "/error")
+                        .requestMatchers("/api/v1/auth/login", "/api/v1/auth/login-config", "/api/v1/health", "/actuator/health", "/error")
                         .permitAll()
                         .requestMatchers("/api/v1/**").authenticated()
                         .anyRequest().authenticated());

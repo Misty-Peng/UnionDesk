@@ -28,9 +28,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             "/error");
 
     private final JwtTokenService jwtTokenService;
+    private final LoginSessionService loginSessionService;
 
-    public JwtAuthenticationFilter(JwtTokenService jwtTokenService) {
+    public JwtAuthenticationFilter(JwtTokenService jwtTokenService, LoginSessionService loginSessionService) {
         this.jwtTokenService = jwtTokenService;
+        this.loginSessionService = loginSessionService;
     }
 
     @Override
@@ -46,13 +48,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             resolveToken(request).ifPresent(token -> {
                 try {
                     UserContext userContext = jwtTokenService.parseAccessToken(token);
-                    UserContextHolder.set(userContext);
-                    UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
-                            userContext,
-                            token,
-                            List.of(new SimpleGrantedAuthority("ROLE_" + userContext.role().toUpperCase(Locale.ROOT))));
-                    authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-                    SecurityContextHolder.getContext().setAuthentication(authentication);
+                    if (loginSessionService.validateAndTouch(userContext.sessionId())) {
+                        UserContextHolder.set(userContext);
+                        UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
+                                userContext,
+                                token,
+                                List.of(new SimpleGrantedAuthority("ROLE_" + userContext.role().toUpperCase(Locale.ROOT))));
+                        authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                        SecurityContextHolder.getContext().setAuthentication(authentication);
+                    }
                 } catch (IllegalArgumentException ignored) {
                     UserContextHolder.clear();
                     SecurityContextHolder.clearContext();

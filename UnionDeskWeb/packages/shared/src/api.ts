@@ -1,24 +1,31 @@
 import axios from "axios";
 import type {
   BackendHealthResponse,
+  AuthSessionStatus,
   ConsultationMessage,
   ConsultationSessionSummary,
   CreateTicketRequest,
   DemoTicket,
+  LoginConfig,
   LoginRequest,
   LoginResponse,
+  LoginLogView,
+  OnlineSessionView,
+  SessionView,
+  UpdateLoginConfigRequest,
   SendConsultationMessagePayload,
   TicketActionResponse,
   TicketRecord
 } from "./types";
 import {
-  loadAdminProfile,
+  clearAuthSession,
+  loadAuthSession,
   loadAccessToken,
   listMessages,
   listSessions,
   mergeTickets,
-  saveAdminProfile,
   saveAccessToken,
+  saveAuthSession,
   saveMessage,
   saveTicketMeta,
   seedTicketMetaIfNeeded
@@ -67,21 +74,143 @@ function unwrapApiResponse<T>(payload: T | { success?: boolean; message?: string
   return payload as T;
 }
 
+const defaultLoginConfig: LoginConfig = {
+  passwordLoginEnabled: true,
+  usernameLoginEnabled: true,
+  emailLoginEnabled: true,
+  mobileLoginEnabled: true,
+  captchaEnabled: false,
+  wechatLoginEnabled: false,
+  wechatLoginUrl: null,
+  wechatHint: null,
+  captchaHint: null,
+  sessionTtlSeconds: 7 * 24 * 60 * 60,
+  maxActiveSessionsPerUser: 10,
+  updatedAt: null
+};
+
+const defaultSessionStatus: AuthSessionStatus = {
+  authenticated: false,
+  username: null,
+  role: null,
+  sid: null,
+  userId: null,
+  businessDomainId: null,
+  expiresAt: null
+};
+
 export async function fetchHealth(): Promise<BackendHealthResponse> {
   const response = await api.get<BackendHealthResponse>("/health");
   return unwrapApiResponse(response.data);
+}
+
+export async function fetchLoginConfig(): Promise<LoginConfig> {
+  try {
+    const response = await api.get<LoginConfig>("/auth/login-config");
+    return {
+      ...defaultLoginConfig,
+      ...unwrapApiResponse(response.data)
+    };
+  } catch {
+    return defaultLoginConfig;
+  }
+}
+
+export async function fetchSessionStatus(): Promise<AuthSessionStatus> {
+  try {
+    const response = await api.get<SessionView>("/auth/session");
+    const session = unwrapApiResponse(response.data);
+    const authSession = loadAuthSession();
+    return {
+      ...defaultSessionStatus,
+      authenticated: true,
+      username: authSession?.username ?? null,
+      role: session.role,
+      sid: session.sid,
+      userId: session.userId,
+      businessDomainId: session.businessDomainId
+    };
+  } catch {
+    const authSession = loadAuthSession();
+    return {
+      ...defaultSessionStatus,
+      authenticated: Boolean(loadAccessToken()),
+      username: authSession?.username ?? null,
+      role: authSession?.role ?? null,
+      sid: authSession?.sid ?? null,
+      userId: authSession?.userId ?? null,
+      businessDomainId: authSession?.businessDomainId ?? null,
+      expiresAt: authSession?.expiresAt ?? null
+    };
+  }
 }
 
 export async function login(payload: LoginRequest): Promise<LoginResponse> {
   try {
     const response = await api.post<LoginResponse>("/auth/login", payload);
     const loginResponse = unwrapApiResponse(response.data);
-    saveAccessToken(loginResponse.accessToken);
-    saveAdminProfile({
-      username: payload.username,
-      selectedDomainId: loadAdminProfile().selectedDomainId
+    saveAuthSession({
+      username: loginResponse.user?.username ?? payload.username,
+      accessToken: loginResponse.accessToken,
+      refreshToken: loginResponse.refreshToken,
+      role: loginResponse.role,
+      sid: loginResponse.sid,
+      userId: loginResponse.user?.id ?? null,
+      businessDomainId: loginResponse.defaultBusinessDomainId ?? null,
+      expiresAt: new Date(Date.now() + loginResponse.expiresInSeconds * 1000).toISOString(),
+      authenticatedAt: new Date().toISOString()
     });
     return loginResponse;
+  } catch (error) {
+    throw toErrorMessage(error);
+  }
+}
+
+export async function updateLoginConfig(payload: UpdateLoginConfigRequest): Promise<LoginConfig> {
+  try {
+    const response = await api.put<LoginConfig>("/auth/login-config", payload);
+    return {
+      ...defaultLoginConfig,
+      ...unwrapApiResponse(response.data)
+    };
+  } catch (error) {
+    throw toErrorMessage(error);
+  }
+}
+
+export async function fetchOnlineSessions(limit = 100): Promise<OnlineSessionView[]> {
+  try {
+    const response = await api.get<OnlineSessionView[]>("/auth/online-sessions", {
+      params: { limit }
+    });
+    return unwrapApiResponse(response.data);
+  } catch (error) {
+    throw toErrorMessage(error);
+  }
+}
+
+export async function revokeOnlineSession(sid: string): Promise<void> {
+  try {
+    await api.post(`/auth/online-sessions/${encodeURIComponent(sid)}/revoke`);
+  } catch (error) {
+    throw toErrorMessage(error);
+  }
+}
+
+export async function revokeUserSessions(userId: number): Promise<void> {
+  try {
+    await api.post(`/auth/users/${userId}/revoke-sessions`);
+  } catch (error) {
+    throw toErrorMessage(error);
+  }
+}
+
+export async function fetchLoginLogs(limit = 100): Promise<LoginLogView[]> {
+  try {
+    const response = await api.get<LoginLogView[]>("/auth/login-logs", {
+      params: { limit }
+    });
+    return unwrapApiResponse(response.data);
   } catch (error) {
     throw toErrorMessage(error);
   }
@@ -140,4 +269,4 @@ export function sendConsultationMessage(payload: SendConsultationMessagePayload)
   return session.sessionNo;
 }
 
-export { loadAdminProfile, saveAdminProfile, saveTicketMeta };
+export { clearAuthSession, saveTicketMeta };

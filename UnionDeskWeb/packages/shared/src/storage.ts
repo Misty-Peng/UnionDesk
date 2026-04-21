@@ -1,4 +1,5 @@
 import {
+  type AuthSessionState,
   DEMO_DOMAINS,
   type AdminProfile,
   type ConsultationMessage,
@@ -13,6 +14,7 @@ const CONSULTATION_STATE_KEY = "uniondesk.demo.consultation-state";
 const CUSTOMER_PROFILE_KEY = "uniondesk.demo.customer-profile";
 const ADMIN_PROFILE_KEY = "uniondesk.demo.admin-profile";
 const ACCESS_TOKEN_KEY = "uniondesk.auth.access-token";
+const AUTH_SESSION_KEY = "uniondesk.auth.session";
 
 const seedMeta: Record<string, TicketMeta> = {
   T202604190001: {
@@ -205,6 +207,21 @@ export function saveAccessToken(token: string): string {
     getStorage().setItem(ACCESS_TOKEN_KEY, "");
   }
   return normalized;
+}
+
+export function loadAuthSession(): AuthSessionState | null {
+  return readJson<AuthSessionState | null>(AUTH_SESSION_KEY, null);
+}
+
+export function saveAuthSession(session: AuthSessionState): AuthSessionState {
+  saveAccessToken(session.accessToken);
+  writeJson(AUTH_SESSION_KEY, session);
+  return session;
+}
+
+export function clearAuthSession(): void {
+  saveAccessToken("");
+  writeJson<AuthSessionState | null>(AUTH_SESSION_KEY, null);
 }
 
 export function loadTicketMeta(ticketNo: string): TicketMeta {

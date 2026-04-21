@@ -11,6 +11,7 @@ import {
   Layout,
   List,
   Row,
+  Slider,
   Select,
   Space,
   Statistic,
@@ -20,9 +21,12 @@ import {
   message
 } from "antd";
 import {
+  fetchLoginConfig,
+  fetchSessionStatus,
   fetchHealth,
   fetchTickets,
   getDemoDomains,
+  loadAuthSession,
   loadAccessToken,
   loadAdminProfile,
   loadConsultationMessages,
@@ -32,12 +36,17 @@ import {
   markTicketResolved,
   saveAdminProfile,
   sendConsultationMessage,
+  type AuthSessionStatus,
+  type LoginConfig,
+  type LoginResponse,
   type ConsultationMessage,
   type ConsultationSessionSummary,
   type DemoDomain,
   type DemoTicket,
   type TicketPriority
 } from "@uniondesk/shared";
+import { Navigate, Route, Routes, useNavigate } from "react-router-dom";
+import { LoginManagementPanel } from "./LoginManagementPanel";
 
 const { Header, Content } = Layout;
 
@@ -56,16 +65,287 @@ const priorityColors: Record<TicketPriority, string> = {
   urgent: "red"
 };
 
-type LoginFormValues = {
-  username: string;
-  password: string;
-};
-
 type ReplyFormValues = {
   content: string;
 };
 
+type AdminBootstrapState = {
+  loginConfig: LoginConfig;
+  session: AuthSessionStatus;
+};
+
+type AdminLoginPageProps = {
+  loginConfig: LoginConfig;
+  onAuthenticated: (session: AuthSessionStatus) => void;
+};
+
+function AdminLoadingScreen() {
+  return (
+    <Layout style={{ minHeight: "100vh", display: "grid", placeItems: "center" }}>
+      <Card bordered={false} style={{ minWidth: 320, textAlign: "center", boxShadow: "0 20px 48px rgba(15, 23, 42, 0.12)" }}>
+        <Space direction="vertical" size={12}>
+          <Typography.Title level={4} style={{ margin: 0 }}>
+            正在检查登录状态
+          </Typography.Title>
+          <Typography.Text type="secondary">加载登录配置与会话状态...</Typography.Text>
+        </Space>
+      </Card>
+    </Layout>
+  );
+}
+
+function AdminLoginPage({ loginConfig, onAuthenticated }: AdminLoginPageProps) {
+  const navigate = useNavigate();
+  const [form] = Form.useForm<{ username: string; password: string; captchaProgress: number }>();
+  const [submitting, setSubmitting] = useState(false);
+  const [wechatLoading, setWechatLoading] = useState(false);
+  const adminProfile = loadAdminProfile();
+
+  async function handleFinish(values: { username: string; password: string; captchaProgress: number }) {
+    if (loginConfig.captchaEnabled && values.captchaProgress < 100) {
+      message.error("请先完成滑块验证码");
+      return;
+    }
+    try {
+      setSubmitting(true);
+      const result = await login({ username: values.username, password: values.password });
+      const nextProfile = {
+        username: values.username,
+        selectedDomainId: adminProfile.selectedDomainId
+      };
+      saveAdminProfile(nextProfile);
+      onAuthenticated({
+        authenticated: true,
+        username: values.username,
+        role: result.role,
+        expiresAt: null
+      });
+      message.success("登录成功");
+      navigate("/", { replace: true });
+    } catch (error) {
+      message.error(`登录失败：${formatError(error)}`);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleWechatLogin() {
+    if (!loginConfig.wechatLoginEnabled) {
+      return;
+    }
+    setWechatLoading(true);
+    try {
+      if (loginConfig.wechatLoginUrl) {
+        window.open(loginConfig.wechatLoginUrl, "_blank", "noopener,noreferrer");
+      } else {
+        message.info(loginConfig.wechatHint ?? "微信登录入口已启用，等待后端接入二维码或重定向地址。");
+      }
+    } finally {
+      setWechatLoading(false);
+    }
+  }
+
+  return (
+    <Layout
+      style={{
+        minHeight: "100vh",
+        background:
+          "radial-gradient(circle at top left, rgba(15, 118, 110, 0.18), transparent 28%), linear-gradient(135deg, #f7fbfb 0%, #eef7f6 100%)"
+      }}
+    >
+      <Content style={{ padding: 24 }}>
+        <Row gutter={[24, 24]} style={{ minHeight: "calc(100vh - 48px)" }} align="middle">
+          <Col xs={24} lg={14}>
+            <Space direction="vertical" size={18} style={{ maxWidth: 720 }}>
+              <Tag color="green" style={{ width: "fit-content", border: "none" }}>
+                UnionDesk 管理入口
+              </Tag>
+              <Typography.Title level={1} style={{ margin: 0, maxWidth: 620 }}>
+                先登录，再进入工单流转和咨询处理工作台
+              </Typography.Title>
+              <Typography.Paragraph style={{ marginBottom: 0, fontSize: 16, color: "#475467", maxWidth: 620 }}>
+                账号密码登录是入口，登录后进入管理工作台。微信登录与滑块验证码是否展示，由共享配置和后端会话状态共同决定。
+              </Typography.Paragraph>
+              <Space wrap>
+                <Card size="small" bordered={false} style={{ background: "#fff", borderRadius: 16, boxShadow: "0 12px 32px rgba(15, 23, 42, 0.08)" }}>
+                  <Space direction="vertical" size={2}>
+                    <Typography.Text type="secondary">工单</Typography.Text>
+                    <Typography.Text strong>流转、分配、处置</Typography.Text>
+                  </Space>
+                </Card>
+                <Card size="small" bordered={false} style={{ background: "#fff", borderRadius: 16, boxShadow: "0 12px 32px rgba(15, 23, 42, 0.08)" }}>
+                  <Space direction="vertical" size={2}>
+                    <Typography.Text type="secondary">会话</Typography.Text>
+                    <Typography.Text strong>咨询处理与回复</Typography.Text>
+                  </Space>
+                </Card>
+                <Card size="small" bordered={false} style={{ background: "#fff", borderRadius: 16, boxShadow: "0 12px 32px rgba(15, 23, 42, 0.08)" }}>
+                  <Space direction="vertical" size={2}>
+                    <Typography.Text type="secondary">权限</Typography.Text>
+                    <Typography.Text strong>域切换与登录态控制</Typography.Text>
+                  </Space>
+                </Card>
+              </Space>
+            </Space>
+          </Col>
+
+          <Col xs={24} lg={10}>
+            <Card
+              bordered={false}
+              style={{
+                boxShadow: "0 28px 60px rgba(12, 74, 110, 0.16)",
+                borderRadius: 24,
+                overflow: "hidden",
+                background: "rgba(255,255,255,0.96)"
+              }}
+            >
+              <Space direction="vertical" size={18} style={{ width: "100%" }}>
+                <div>
+                  <Typography.Title level={3} style={{ marginBottom: 8 }}>
+                    账号密码登录
+                  </Typography.Title>
+                  <Typography.Text type="secondary">
+                    {loginConfig.captchaEnabled ? loginConfig.captchaHint ?? "拖动滑块后继续登录" : "使用账号和密码直接进入管理工作台"}
+                  </Typography.Text>
+                </div>
+
+                <Form
+                  form={form}
+                  layout="vertical"
+                  initialValues={{ username: adminProfile.username, password: "admin123", captchaProgress: 0 }}
+                  onFinish={handleFinish}
+                >
+                  <Form.Item label="账号" name="username" rules={[{ required: true, message: "请输入账号" }]}>
+                    <Input size="large" placeholder="admin" autoComplete="username" />
+                  </Form.Item>
+                  <Form.Item label="密码" name="password" rules={[{ required: true, message: "请输入密码" }]}>
+                    <Input.Password size="large" placeholder="admin123" autoComplete="current-password" />
+                  </Form.Item>
+                  {loginConfig.captchaEnabled && (
+                    <Form.Item
+                      label={loginConfig.captchaHint ?? "滑块验证码"}
+                      name="captchaProgress"
+                      rules={[
+                        {
+                          validator: async (_, value: number | undefined) => {
+                            if ((value ?? 0) < 100) {
+                              throw new Error("请拖动滑块到最右侧完成验证");
+                            }
+                          }
+                        }
+                      ]}
+                    >
+                      <Slider min={0} max={100} />
+                    </Form.Item>
+                  )}
+                  <Button type="primary" htmlType="submit" loading={submitting} size="large" block>
+                    登录并进入工作台
+                  </Button>
+                </Form>
+
+                {loginConfig.wechatLoginEnabled && (
+                  <Card
+                    bordered
+                    size="small"
+                    style={{ borderRadius: 16, background: "linear-gradient(180deg, #f5fffd 0%, #edfaf8 100%)" }}
+                    bodyStyle={{ padding: 16 }}
+                  >
+                    <Space direction="vertical" size={8} style={{ width: "100%" }}>
+                      <Typography.Text strong>微信登录</Typography.Text>
+                      <Typography.Text type="secondary">
+                        {loginConfig.wechatHint ?? "使用微信扫码进入管理工作台。"}
+                      </Typography.Text>
+                      <Button loading={wechatLoading} onClick={() => void handleWechatLogin()} block>
+                        打开微信登录入口
+                      </Button>
+                    </Space>
+                  </Card>
+                )}
+              </Space>
+            </Card>
+          </Col>
+        </Row>
+      </Content>
+    </Layout>
+  );
+}
+
 export default function App() {
+  const [bootstrap, setBootstrap] = useState<AdminBootstrapState | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    void bootstrapAuth();
+    return () => {
+      active = false;
+    };
+
+    async function bootstrapAuth() {
+      try {
+        const [loginConfig, session] = await Promise.all([fetchLoginConfig(), fetchSessionStatus()]);
+        if (active) {
+          setBootstrap({ loginConfig, session });
+        }
+      } catch {
+        if (active) {
+          setBootstrap({
+            loginConfig: {
+              passwordLoginEnabled: true,
+              usernameLoginEnabled: true,
+              emailLoginEnabled: true,
+              mobileLoginEnabled: true,
+              captchaEnabled: false,
+              wechatLoginEnabled: false,
+              wechatLoginUrl: null,
+              wechatHint: null,
+              captchaHint: null,
+              sessionTtlSeconds: 7 * 24 * 60 * 60,
+              maxActiveSessionsPerUser: 10,
+              updatedAt: null
+            },
+            session: {
+              authenticated: Boolean(loadAccessToken()),
+              username: loadAuthSession()?.username ?? null,
+              role: loadAuthSession()?.role ?? null,
+              sid: loadAuthSession()?.sid ?? null,
+              userId: loadAuthSession()?.userId ?? null,
+              businessDomainId: loadAuthSession()?.businessDomainId ?? null,
+              expiresAt: null
+            }
+          });
+        }
+      }
+    }
+  }, []);
+
+  if (!bootstrap) {
+    return <AdminLoadingScreen />;
+  }
+
+  return (
+    <Routes>
+      <Route
+        path="/login"
+        element={
+          bootstrap.session.authenticated ? (
+            <Navigate to="/" replace />
+          ) : (
+            <AdminLoginPage
+              loginConfig={bootstrap.loginConfig}
+              onAuthenticated={(session) => {
+                setBootstrap((current) => (current ? { ...current, session } : current));
+              }}
+            />
+          )
+        }
+      />
+      <Route path="/" element={bootstrap.session.authenticated ? <AdminWorkspacePage /> : <Navigate to="/login" replace />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  );
+}
+
+function AdminWorkspacePage() {
   const [domains] = useState<DemoDomain[]>(() => getDemoDomains());
   const [profile, setProfile] = useState(() => loadAdminProfile());
   const [selectedDomainId, setSelectedDomainId] = useState<number>(profile.selectedDomainId);
@@ -74,13 +354,11 @@ export default function App() {
   const [sessions, setSessions] = useState<ConsultationSessionSummary[]>([]);
   const [selectedSession, setSelectedSession] = useState<ConsultationSessionSummary>();
   const [messages, setMessages] = useState<ConsultationMessage[]>([]);
-  const [authToken, setAuthToken] = useState<string>(() => loadAccessToken());
-  const [loginLoading, setLoginLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [replyLoading, setReplyLoading] = useState(false);
-  const [loginForm] = Form.useForm<LoginFormValues>();
   const [replyForm] = Form.useForm<ReplyFormValues>();
+  const authToken = loadAccessToken();
 
   useEffect(() => {
     void bootstrap();
@@ -150,26 +428,6 @@ export default function App() {
       message.error(`加载管理工作台失败：${formatError(error)}`);
     } finally {
       setLoading(false);
-    }
-  }
-
-  async function handleLogin(values: LoginFormValues) {
-    try {
-      setLoginLoading(true);
-      const result = await login(values);
-      setAuthToken(result.accessToken);
-      const nextProfile = {
-        username: values.username,
-        selectedDomainId
-      };
-      setProfile(nextProfile);
-      saveAdminProfile(nextProfile);
-      message.success(`登录成功，角色：${result.role}`);
-      await refreshDomainData(selectedDomainId);
-    } catch (error) {
-      message.error(`登录失败：${formatError(error)}`);
-    } finally {
-      setLoginLoading(false);
     }
   }
 
@@ -304,25 +562,6 @@ export default function App() {
           </Row>
 
           <Row gutter={[16, 16]}>
-            <Col xs={24} lg={8}>
-              <Card title="登录" bordered={false} style={{ boxShadow: "0 16px 40px rgba(15, 23, 42, 0.08)" }}>
-                <Form form={loginForm} layout="vertical" initialValues={{ username: profile.username, password: "admin123" }} onFinish={handleLogin}>
-                  <Form.Item label="用户名" name="username" rules={[{ required: true, message: "请输入用户名" }]}>
-                    <Input placeholder="admin" />
-                  </Form.Item>
-                  <Form.Item label="密码" name="password" rules={[{ required: true, message: "请输入密码" }]}>
-                    <Input.Password placeholder="admin123" />
-                  </Form.Item>
-                  <Button type="primary" htmlType="submit" loading={loginLoading} block>
-                    登录后台
-                  </Button>
-                </Form>
-                <Typography.Paragraph type="secondary" style={{ marginTop: 12, marginBottom: 0 }}>
-                  后端当前只开放了管理员演示账号：admin / admin123。
-                </Typography.Paragraph>
-              </Card>
-            </Col>
-
             <Col xs={24} lg={16}>
               <Card title="工单列表" bordered={false} style={{ boxShadow: "0 16px 40px rgba(15, 23, 42, 0.08)" }}>
                 <Table
@@ -357,6 +596,17 @@ export default function App() {
                     }
                   ]}
                 />
+              </Card>
+            </Col>
+            <Col xs={24} lg={8}>
+              <Card title="登录状态" bordered={false} style={{ boxShadow: "0 16px 40px rgba(15, 23, 42, 0.08)" }}>
+                <Space direction="vertical" size={12} style={{ width: "100%" }}>
+                  <Typography.Text type="secondary">当前登录账号</Typography.Text>
+                  <Typography.Text strong>{profile.username}</Typography.Text>
+                  <Typography.Text type="secondary">
+                    后台登录由独立 `/login` 页面处理，这里只保留工作态与域切换能力。
+                  </Typography.Text>
+                </Space>
               </Card>
             </Col>
           </Row>
@@ -416,6 +666,7 @@ export default function App() {
               </Card>
             </Col>
           </Row>
+          <LoginManagementPanel />
         </Space>
       </Content>
 

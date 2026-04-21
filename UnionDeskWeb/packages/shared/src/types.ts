@@ -10,7 +10,118 @@ export type LoginRequest = {
 export type LoginResponse = {
   accessToken: string;
   refreshToken: string;
+  sid: string;
   role: string;
+  tokenType: string;
+  expiresInSeconds: number;
+  user: LoginUserView;
+  accessibleDomains: BusinessDomainView[];
+  defaultBusinessDomainId: number;
+};
+
+export type LoginConfig = {
+  passwordLoginEnabled: boolean;
+  usernameLoginEnabled: boolean;
+  emailLoginEnabled: boolean;
+  mobileLoginEnabled: boolean;
+  captchaEnabled: boolean;
+  wechatLoginEnabled: boolean;
+  wechatLoginUrl?: string | null;
+  wechatHint?: string | null;
+  captchaHint?: string | null;
+  sessionTtlSeconds: number;
+  maxActiveSessionsPerUser: number;
+  updatedAt?: string | null;
+};
+
+export type AuthSessionStatus = {
+  authenticated: boolean;
+  username?: string | null;
+  role?: string | null;
+  sid?: string | null;
+  userId?: number | null;
+  businessDomainId?: number | null;
+  expiresAt?: string | null;
+};
+
+export type AuthSessionState = {
+  username: string;
+  accessToken: string;
+  refreshToken: string;
+  role: string;
+  authenticatedAt: string;
+  sid?: string | null;
+  userId?: number | null;
+  businessDomainId?: number | null;
+  expiresAt?: string | null;
+};
+
+export type LoginUserView = {
+  id: number;
+  username: string;
+  mobile?: string | null;
+  email?: string | null;
+  roles: string[];
+};
+
+export type BusinessDomainView = {
+  id: number;
+  code: string;
+  name: string;
+  visibilityPolicy?: string | null;
+  status?: number | null;
+};
+
+export type UpdateLoginConfigRequest = {
+  passwordLoginEnabled?: boolean;
+  usernameLoginEnabled?: boolean;
+  emailLoginEnabled?: boolean;
+  mobileLoginEnabled?: boolean;
+  captchaEnabled?: boolean;
+  wechatLoginEnabled?: boolean;
+  captchaHint?: string | null;
+  wechatHint?: string | null;
+  sessionTtlSeconds?: number;
+  maxActiveSessionsPerUser?: number;
+};
+
+export type SessionView = {
+  userId: number;
+  role: string;
+  businessDomainId?: number | null;
+  sid: string;
+};
+
+export type OnlineSessionView = {
+  sid: string;
+  userId: number;
+  username: string;
+  mobile?: string | null;
+  email?: string | null;
+  role: string;
+  businessDomainId?: number | null;
+  loginIdentifierMasked: string;
+  sessionStatus: string;
+  issuedAt: string;
+  expiresAt: string;
+  lastSeenAt?: string | null;
+  clientIp?: string | null;
+  userAgent?: string | null;
+};
+
+export type LoginLogView = {
+  id: number;
+  sid?: string | null;
+  userId?: number | null;
+  username?: string | null;
+  loginIdentifierMasked: string;
+  loginIdentifierType: string;
+  eventType: string;
+  result: string;
+  reason?: string | null;
+  clientIp?: string | null;
+  userAgent?: string | null;
+  createdAt: string;
 };
 
 export type TicketStatus = "open" | "processing" | "waiting_customer" | "resolved" | "closed" | string;
