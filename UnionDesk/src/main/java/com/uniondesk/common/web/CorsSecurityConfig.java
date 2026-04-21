@@ -1,13 +1,18 @@
 package com.uniondesk.common.web;
 
-import com.uniondesk.auth.web.AuthController;
-import jakarta.servlet.http.HttpServletRequest;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.uniondesk.auth.core.JwtAuthenticationFilter;
+import com.uniondesk.common.web.ApiResponse;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -17,14 +22,25 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 public class CorsSecurityConfig {
 
     @Bean
-    SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    SecurityFilterChain securityFilterChain(HttpSecurity http, JwtAuthenticationFilter jwtAuthenticationFilter)
+            throws Exception {
         http.csrf(AbstractHttpConfigurer::disable)
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .cors(cors -> {})
+                .formLogin(AbstractHttpConfigurer::disable)
+                .httpBasic(AbstractHttpConfigurer::disable)
+                .exceptionHandling(exception -> exception.authenticationEntryPoint((request, response, authException) -> {
+                    response.setStatus(401);
+                    response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+                    new ObjectMapper().writeValue(response.getWriter(), ApiResponse.error("UNAUTHORIZED", "unauthorized"));
+                }))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/v1/health", "/actuator/health", "/api/v1/auth/login", "/api/v1/tickets/**").permitAll()
-                        .anyRequest().authenticated())
-                .addFilterBefore((request, response, chain) -> chain.doFilter(request, response),
-                        org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter.class);
+                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                        .requestMatchers("/api/v1/auth/login", "/api/v1/health", "/actuator/health", "/error")
+                        .permitAll()
+                        .requestMatchers("/api/v1/**").authenticated()
+                        .anyRequest().authenticated());
+        http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }
 

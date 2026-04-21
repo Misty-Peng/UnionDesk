@@ -18,3 +18,11 @@ management:
     web:
       exposure:
         include: health,info
+
+uniondesk:
+  security:
+    jwt:
+      issuer: uniondesk
+      secret: uniondesk-demo-jwt-secret-please-change-me
+      access-token-ttl: PT24H
+      refresh-token-ttl: P7D

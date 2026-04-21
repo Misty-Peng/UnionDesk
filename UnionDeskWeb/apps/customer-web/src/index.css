@@ -1,22 +1,28 @@
 :root {
   color-scheme: light;
-  font-family: Inter, "PingFang SC", "Microsoft YaHei", sans-serif;
-  background: #f4f7fb;
+  font-family: "Inter", "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
   color: #152033;
+  background:
+    radial-gradient(circle at top, rgba(109, 94, 252, 0.14), transparent 28%),
+    linear-gradient(180deg, #f7f7ff 0%, #eef2ff 100%);
 }
 
 * {
   box-sizing: border-box;
 }
 
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
 body {
   margin: 0;
   min-width: 320px;
-  background:
-    radial-gradient(circle at top, rgba(109, 94, 252, 0.12), transparent 30%),
-    linear-gradient(180deg, #f7f9ff 0%, #eff4ff 100%);
+  background: inherit;
 }
 
-#root {
-  min-height: 100vh;
+a {
+  color: inherit;
 }
