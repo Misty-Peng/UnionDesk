@@ -19,19 +19,19 @@ public class LoginAccountService {
     public Optional<LoginAccount> findByIdentifier(String identifier, LoginIdentifierType type) {
         String sql = switch (type) {
             case USERNAME -> """
-                    SELECT id, username, mobile, email, password_hash, status
+                    SELECT id, username, mobile, email, password_hash, status, account_type, employment_status
                     FROM user_account
                     WHERE LOWER(username) = LOWER(?)
                     LIMIT 1
                     """;
             case EMAIL -> """
-                    SELECT id, username, mobile, email, password_hash, status
+                    SELECT id, username, mobile, email, password_hash, status, account_type, employment_status
                     FROM user_account
                     WHERE LOWER(email) = LOWER(?)
                     LIMIT 1
                     """;
             case MOBILE -> """
-                    SELECT id, username, mobile, email, password_hash, status
+                    SELECT id, username, mobile, email, password_hash, status, account_type, employment_status
                     FROM user_account
                     WHERE mobile = ?
                     LIMIT 1
@@ -43,12 +43,14 @@ public class LoginAccountService {
                 rs.getString("mobile"),
                 rs.getString("email"),
                 rs.getString("password_hash"),
-                rs.getInt("status")), identifier.trim()).stream().findFirst();
+                rs.getInt("status"),
+                rs.getString("account_type"),
+                rs.getString("employment_status")), identifier.trim()).stream().findFirst();
     }
 
     public Optional<LoginAccount> findById(long userId) {
         return jdbcTemplate.query("""
-                        SELECT id, username, mobile, email, password_hash, status
+                        SELECT id, username, mobile, email, password_hash, status, account_type, employment_status
                         FROM user_account
                         WHERE id = ?
                         LIMIT 1
@@ -59,7 +61,9 @@ public class LoginAccountService {
                         rs.getString("mobile"),
                         rs.getString("email"),
                         rs.getString("password_hash"),
-                        rs.getInt("status")),
+                        rs.getInt("status"),
+                        rs.getString("account_type"),
+                        rs.getString("employment_status")),
                 userId).stream().findFirst();
     }
 
@@ -86,15 +90,24 @@ public class LoginAccountService {
     }
 
     public List<Long> loadAccessibleDomainIds(long userId, List<String> roleCodes) {
+        if (roleCodes == null || roleCodes.isEmpty()) {
+            return List.of();
+        }
         if (roleCodes.contains("super_admin")) {
             return jdbcTemplate.queryForList("SELECT id FROM business_domain ORDER BY id", Long.class);
         }
+        String rolePlaceholders = String.join(",", roleCodes.stream().map(role -> "?").toList());
+        List<Object> args = new ArrayList<>();
+        args.add(userId);
+        args.addAll(roleCodes);
         return jdbcTemplate.queryForList("""
-                        SELECT DISTINCT business_domain_id
-                        FROM user_domain_role
-                        WHERE user_id = ?
-                        ORDER BY business_domain_id
-                        """, Long.class, userId);
+                        SELECT DISTINCT udr.business_domain_id
+                        FROM user_domain_role udr
+                        JOIN role r ON r.id = udr.role_id
+                        WHERE udr.user_id = ?
+                          AND r.code IN (%s)
+                        ORDER BY udr.business_domain_id
+                        """.formatted(rolePlaceholders), Long.class, args.toArray());
     }
 
     private static int rolePriority(String role) {
@@ -107,6 +120,14 @@ public class LoginAccountService {
         };
     }
 
-    public record LoginAccount(long id, String username, String mobile, String email, String passwordHash, int status) {
+    public record LoginAccount(
+            long id,
+            String username,
+            String mobile,
+            String email,
+            String passwordHash,
+            int status,
+            String accountType,
+            String employmentStatus) {
     }
 }

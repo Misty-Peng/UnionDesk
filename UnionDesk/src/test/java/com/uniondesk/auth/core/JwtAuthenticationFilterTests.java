@@ -5,6 +5,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.uniondesk.iam.core.IamService;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicReference;
@@ -29,7 +30,8 @@ class JwtAuthenticationFilterTests {
             Duration.ofDays(7));
 
     private final LoginSessionService loginSessionService = mock(LoginSessionService.class);
-    private final JwtAuthenticationFilter filter = new JwtAuthenticationFilter(jwtTokenService, loginSessionService);
+    private final IamService iamService = mock(IamService.class);
+    private final JwtAuthenticationFilter filter = new JwtAuthenticationFilter(jwtTokenService, loginSessionService, iamService, new ObjectMapper());
 
     @AfterEach
     void cleanup() {
@@ -39,11 +41,13 @@ class JwtAuthenticationFilterTests {
 
     @Test
     void populatesUserContextAndAuthenticationForBearerToken() throws ServletException, IOException {
-        UserContext expected = new UserContext(7L, "agent", 11L, "sid-7");
+        UserContext expected = new UserContext(7L, "agent", 11L, "sid-7", "ud-admin-web");
         String token = jwtTokenService.issueAccessToken(expected);
-        when(loginSessionService.validateAndTouch("sid-7")).thenReturn(true);
+        when(loginSessionService.validateAndTouch("sid-7", "ud-admin-web")).thenReturn(true);
+        when(iamService.isApiAllowed(expected, "GET", "/api/v1/tickets")).thenReturn(true);
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/tickets");
         request.addHeader("Authorization", "Bearer " + token);
+        request.addHeader(AuthClientHeaders.CLIENT_CODE_HEADER, "ud-admin-web");
         MockHttpServletResponse response = new MockHttpServletResponse();
         AtomicReference<Authentication> authenticationRef = new AtomicReference<>();
         AtomicReference<UserContext> contextRef = new AtomicReference<>();
@@ -81,6 +85,7 @@ class JwtAuthenticationFilterTests {
     @Test
     void leavesProtectedRequestUnauthenticatedWhenTokenMissing() throws ServletException, IOException {
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/tickets");
+        request.addHeader(AuthClientHeaders.CLIENT_CODE_HEADER, "ud-admin-web");
         MockHttpServletResponse response = new MockHttpServletResponse();
         AtomicReference<Authentication> authenticationRef = new AtomicReference<>();
         AtomicReference<UserContext> contextRef = new AtomicReference<>();
@@ -97,11 +102,12 @@ class JwtAuthenticationFilterTests {
 
     @Test
     void rejectsRevokedSessionSid() throws ServletException, IOException {
-        UserContext expected = new UserContext(7L, "agent", 11L, "sid-revoked");
+        UserContext expected = new UserContext(7L, "agent", 11L, "sid-revoked", "ud-admin-web");
         String token = jwtTokenService.issueAccessToken(expected);
-        when(loginSessionService.validateAndTouch("sid-revoked")).thenReturn(false);
+        when(loginSessionService.validateAndTouch("sid-revoked", "ud-admin-web")).thenReturn(false);
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/tickets");
         request.addHeader("Authorization", "Bearer " + token);
+        request.addHeader(AuthClientHeaders.CLIENT_CODE_HEADER, "ud-admin-web");
         MockHttpServletResponse response = new MockHttpServletResponse();
         AtomicReference<Authentication> authenticationRef = new AtomicReference<>();
         AtomicReference<UserContext> contextRef = new AtomicReference<>();
@@ -114,5 +120,18 @@ class JwtAuthenticationFilterTests {
 
         assertThat(authenticationRef.get()).isNull();
         assertThat(contextRef.get()).isNull();
+    }
+
+    @Test
+    void rejectsProtectedRequestWithoutClientCodeHeader() throws ServletException, IOException {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/tickets");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        AtomicReference<Boolean> chainInvoked = new AtomicReference<>(false);
+        FilterChain chain = (req, res) -> chainInvoked.set(true);
+
+        filter.doFilter(request, response, chain);
+
+        assertThat(chainInvoked.get()).isFalse();
+        assertThat(response.getStatus()).isEqualTo(401);
     }
 }

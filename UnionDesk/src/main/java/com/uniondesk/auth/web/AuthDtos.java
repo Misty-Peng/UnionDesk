@@ -23,6 +23,7 @@ public final class AuthDtos {
             String refreshToken,
             String sid,
             String role,
+            String clientCode,
             String tokenType,
             long expiresInSeconds,
             LoginUserView user,
@@ -61,12 +62,14 @@ public final class AuthDtos {
             long userId,
             String role,
             Long businessDomainId,
-            String sid) {
+            String sid,
+            String clientCode) {
     }
 
     public record OnlineSessionView(
             String sid,
             long userId,
+            String clientCode,
             String username,
             String mobile,
             String email,

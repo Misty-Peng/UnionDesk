@@ -5,9 +5,13 @@
   "scripts": {
     "dev:customer": "pnpm --filter customer-web dev",
     "dev:admin": "pnpm --filter admin-web dev",
-    "dev": "pnpm -r --parallel dev",
+    "dev": "pnpm --filter admin-web dev",
+    "check:utf8": "node ./scripts/check-utf8.mjs",
+    "build:admin": "pnpm --filter admin-web build",
+    "lint:admin": "pnpm run check:utf8 && pnpm --filter admin-web lint",
+    "typecheck:admin": "pnpm --filter admin-web typecheck",
     "build": "pnpm -r build",
-    "lint": "pnpm -r lint",
+    "lint": "pnpm run check:utf8 && pnpm -r lint",
     "typecheck": "pnpm -r typecheck"
   }
 }

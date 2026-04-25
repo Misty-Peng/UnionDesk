@@ -2,6 +2,8 @@ export type BackendHealthResponse = {
   status: string;
 };
 
+export type ClientCode = "ud-admin-web" | "ud-customer-web" | string;
+
 export type LoginRequest = {
   username: string;
   password: string;
@@ -12,6 +14,7 @@ export type LoginResponse = {
   refreshToken: string;
   sid: string;
   role: string;
+  clientCode: ClientCode;
   tokenType: string;
   expiresInSeconds: number;
   user: LoginUserView;
@@ -38,6 +41,7 @@ export type AuthSessionStatus = {
   authenticated: boolean;
   username?: string | null;
   role?: string | null;
+  clientCode?: ClientCode | null;
   sid?: string | null;
   userId?: number | null;
   businessDomainId?: number | null;
@@ -49,6 +53,7 @@ export type AuthSessionState = {
   accessToken: string;
   refreshToken: string;
   role: string;
+  clientCode: ClientCode;
   authenticatedAt: string;
   sid?: string | null;
   userId?: number | null;
@@ -90,11 +95,13 @@ export type SessionView = {
   role: string;
   businessDomainId?: number | null;
   sid: string;
+  clientCode: ClientCode;
 };
 
 export type OnlineSessionView = {
   sid: string;
   userId: number;
+  clientCode: ClientCode;
   username: string;
   mobile?: string | null;
   email?: string | null;
@@ -122,6 +129,156 @@ export type LoginLogView = {
   clientIp?: string | null;
   userAgent?: string | null;
   createdAt: string;
+};
+
+export type IamResource = {
+  id: number;
+  resourceType: "menu" | "action" | "api" | string;
+  resourceCode: string;
+  resourceName: string;
+  clientScope: ClientCode | "all" | string;
+  httpMethod?: string | null;
+  pathPattern?: string | null;
+  parentId?: number | null;
+  orderNo?: number;
+  icon?: string | null;
+  component?: string | null;
+  hidden?: boolean;
+  status: number;
+};
+
+export type PermissionSnapshotUser = {
+  id: number;
+  username: string;
+  mobile?: string | null;
+  email?: string | null;
+};
+
+export type PermissionSnapshotDomain = {
+  id: number;
+  code: string;
+  name: string;
+};
+
+export type PermissionSnapshotMenu = {
+  id?: number;
+  code: string;
+  name: string;
+  path: string;
+  parentId?: number | null;
+  orderNo?: number;
+  icon?: string | null;
+  component?: string | null;
+  hidden?: boolean;
+};
+
+export type PermissionSnapshotAction = {
+  code: string;
+  httpMethod?: string | null;
+  pathPattern?: string | null;
+};
+
+export type PermissionSnapshot = {
+  user: PermissionSnapshotUser;
+  clientCode: ClientCode;
+  roles: string[];
+  domains: PermissionSnapshotDomain[];
+  menus: PermissionSnapshotMenu[];
+  actions: PermissionSnapshotAction[];
+  issuedAt: string;
+};
+
+export type MenuTreeNode = {
+  id: number;
+  code: string;
+  name: string;
+  path: string;
+  clientScope: ClientCode | "all" | string;
+  parentId?: number | null;
+  orderNo: number;
+  icon?: string | null;
+  component?: string | null;
+  hidden: boolean;
+  status: number;
+  children: MenuTreeNode[];
+};
+
+export type CreateMenuPayload = {
+  resourceCode: string;
+  resourceName: string;
+  path: string;
+  clientScope: ClientCode | "all" | string;
+  parentId?: number | null;
+  orderNo?: number;
+  icon?: string | null;
+  component?: string | null;
+  hidden?: boolean;
+  status?: number;
+};
+
+export type UpdateMenuPayload = Partial<CreateMenuPayload>;
+
+export type IamRole = {
+  id: number;
+  code: string;
+  name: string;
+  scope: "global" | "domain" | string;
+  system: boolean;
+};
+
+export type CreateRolePayload = {
+  code: string;
+  name: string;
+  scope: "global" | "domain" | string;
+};
+
+export type UpdateRolePayload = Partial<CreateRolePayload>;
+
+export type RolePermissions = {
+  roleId: number;
+  menuResourceIds: number[];
+  actionResourceIds: number[];
+};
+
+export type UpdateRolePermissionsPayload = {
+  menuResourceIds: number[];
+  actionResourceIds: number[];
+};
+
+export type IamUser = {
+  id: number;
+  username: string;
+  mobile: string;
+  email?: string | null;
+  accountType: "admin" | "customer" | string;
+  status: number;
+  employmentStatus: "active" | "offboarded" | string;
+  roleCodes: string[];
+  businessDomainIds: number[];
+  offboardedAt?: string | null;
+  offboardedBy?: number | null;
+  offboardReason?: string | null;
+};
+
+export type CreateIamUserPayload = {
+  username: string;
+  mobile: string;
+  email?: string | null;
+  password: string;
+  accountType: "admin" | "customer" | string;
+  roleCodes: string[];
+  businessDomainIds: number[];
+};
+
+export type UpdateIamUserPayload = {
+  username?: string;
+  mobile?: string;
+  email?: string | null;
+  password?: string;
+  accountType?: "admin" | "customer" | string;
+  roleCodes?: string[];
+  businessDomainIds?: number[];
+  status?: number;
 };
 
 export type TicketStatus = "open" | "processing" | "waiting_customer" | "resolved" | "closed" | string;

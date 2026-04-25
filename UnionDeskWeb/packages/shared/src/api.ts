@@ -2,10 +2,20 @@ import axios from "axios";
 import type {
   BackendHealthResponse,
   AuthSessionStatus,
+  ClientCode,
   ConsultationMessage,
   ConsultationSessionSummary,
+  BusinessDomainView,
+  CreateIamUserPayload,
+  CreateMenuPayload,
+  CreateRolePayload,
   CreateTicketRequest,
   DemoTicket,
+  IamResource,
+  IamRole,
+  IamUser,
+  MenuTreeNode,
+  PermissionSnapshot,
   LoginConfig,
   LoginRequest,
   LoginResponse,
@@ -15,7 +25,12 @@ import type {
   UpdateLoginConfigRequest,
   SendConsultationMessagePayload,
   TicketActionResponse,
-  TicketRecord
+  TicketRecord,
+  RolePermissions,
+  UpdateIamUserPayload,
+  UpdateMenuPayload,
+  UpdateRolePayload,
+  UpdateRolePermissionsPayload
 } from "./types";
 import {
   clearAuthSession,
@@ -23,9 +38,10 @@ import {
   loadAccessToken,
   listMessages,
   listSessions,
+  loadPermissionSnapshot,
   mergeTickets,
-  saveAccessToken,
   saveAuthSession,
+  savePermissionSnapshot,
   saveMessage,
   saveTicketMeta,
   seedTicketMetaIfNeeded
@@ -36,14 +52,84 @@ const api = axios.create({
   timeout: 10_000
 });
 
+type ApiEnvelope<T> = {
+  code?: number | string;
+  success?: boolean;
+  message?: unknown;
+  data?: T;
+};
+type RetriableRequestConfig = {
+  __retried?: boolean;
+  method?: string;
+};
+const CLIENT_CODE_HEADER = "X-UD-Client-Code";
+let runtimeClientCode: ClientCode | null = null;
+
+export function setClientCode(clientCode: ClientCode): void {
+  runtimeClientCode = clientCode;
+}
+
+export function getClientCode(): ClientCode | null {
+  return runtimeClientCode;
+}
+
+function resolveClientCode(): ClientCode | null {
+  return runtimeClientCode ?? loadAuthSession()?.clientCode ?? null;
+}
+
 api.interceptors.request.use((config) => {
   const token = loadAccessToken();
+  const clientCode = resolveClientCode();
+  config.headers = config.headers ?? {};
+  if (clientCode) {
+    config.headers[CLIENT_CODE_HEADER] = clientCode;
+  }
   if (token) {
-    config.headers = config.headers ?? {};
     config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
 });
+
+api.interceptors.response.use(
+  (response) => {
+    const payload = response.data as ApiEnvelope<unknown> | unknown;
+    if (payload && typeof payload === "object" && "code" in payload) {
+      const code = (payload as ApiEnvelope<unknown>).code;
+      const isErrorCode =
+        (typeof code === "number" && code !== 0) ||
+        (typeof code === "string" &&
+          code.trim() !== "" &&
+          code.trim() !== "0" &&
+          code.trim().toUpperCase() !== "SUCCESS" &&
+          code.trim().toUpperCase() !== "OK");
+      if (isErrorCode) {
+        const message = (payload as ApiEnvelope<unknown>).message;
+        return Promise.reject(new Error(typeof message === "string" ? message : "Request failed"));
+      }
+    }
+    if (payload && typeof payload === "object" && "success" in payload && (payload as ApiEnvelope<unknown>).success === false) {
+      const message = (payload as ApiEnvelope<unknown>).message;
+      return Promise.reject(new Error(typeof message === "string" ? message : "Request failed"));
+    }
+    return response;
+  },
+  async (error) => {
+    if (axios.isAxiosError(error)) {
+      const status = error.response?.status;
+      const requestConfig = error.config as (RetriableRequestConfig & object) | undefined;
+      const method = requestConfig?.method?.toLowerCase();
+      const shouldRetry = method === "get" && !requestConfig?.__retried && (status === undefined || status >= 500);
+      if (shouldRetry && requestConfig) {
+        requestConfig.__retried = true;
+        return api.request(requestConfig);
+      }
+      if (status === 401) {
+        clearAuthSession();
+      }
+    }
+    return Promise.reject(error);
+  }
+);
 
 function getApiBaseUrl(): string {
   if (typeof window !== "undefined") {
@@ -55,7 +141,7 @@ function getApiBaseUrl(): string {
   return "/api/v1";
 }
 
-function toErrorMessage(error: unknown): Error {
+function toError(error: unknown): Error {
   if (axios.isAxiosError(error)) {
     const responseData = error.response?.data as { message?: unknown } | undefined;
     const message = typeof responseData?.message === "string" ? responseData.message : error.message;
@@ -67,6 +153,10 @@ function toErrorMessage(error: unknown): Error {
   return new Error(String(error));
 }
 
+export function toErrorMessage(error: unknown): string {
+  return toError(error).message;
+}
+
 function unwrapApiResponse<T>(payload: T | { success?: boolean; message?: string; data?: T }): T {
   if (payload && typeof payload === "object" && "data" in payload) {
     return (payload as { data?: T }).data as T;
@@ -74,7 +164,7 @@ function unwrapApiResponse<T>(payload: T | { success?: boolean; message?: string
   return payload as T;
 }
 
-const defaultLoginConfig: LoginConfig = {
+export const defaultLoginConfig: LoginConfig = {
   passwordLoginEnabled: true,
   usernameLoginEnabled: true,
   emailLoginEnabled: true,
@@ -93,6 +183,7 @@ const defaultSessionStatus: AuthSessionStatus = {
   authenticated: false,
   username: null,
   role: null,
+  clientCode: null,
   sid: null,
   userId: null,
   businessDomainId: null,
@@ -102,6 +193,15 @@ const defaultSessionStatus: AuthSessionStatus = {
 export async function fetchHealth(): Promise<BackendHealthResponse> {
   const response = await api.get<BackendHealthResponse>("/health");
   return unwrapApiResponse(response.data);
+}
+
+export async function fetchDomains(): Promise<BusinessDomainView[]> {
+  try {
+    const response = await api.get<BusinessDomainView[]>("/domains");
+    return unwrapApiResponse(response.data);
+  } catch (error) {
+    throw toError(error);
+  }
 }
 
 export async function fetchLoginConfig(): Promise<LoginConfig> {
@@ -126,6 +226,7 @@ export async function fetchSessionStatus(): Promise<AuthSessionStatus> {
       authenticated: true,
       username: authSession?.username ?? null,
       role: session.role,
+      clientCode: session.clientCode,
       sid: session.sid,
       userId: session.userId,
       businessDomainId: session.businessDomainId
@@ -134,9 +235,10 @@ export async function fetchSessionStatus(): Promise<AuthSessionStatus> {
     const authSession = loadAuthSession();
     return {
       ...defaultSessionStatus,
-      authenticated: Boolean(loadAccessToken()),
+      authenticated: false,
       username: authSession?.username ?? null,
       role: authSession?.role ?? null,
+      clientCode: authSession?.clientCode ?? null,
       sid: authSession?.sid ?? null,
       userId: authSession?.userId ?? null,
       businessDomainId: authSession?.businessDomainId ?? null,
@@ -154,15 +256,30 @@ export async function login(payload: LoginRequest): Promise<LoginResponse> {
       accessToken: loginResponse.accessToken,
       refreshToken: loginResponse.refreshToken,
       role: loginResponse.role,
+      clientCode: loginResponse.clientCode,
       sid: loginResponse.sid,
       userId: loginResponse.user?.id ?? null,
       businessDomainId: loginResponse.defaultBusinessDomainId ?? null,
       expiresAt: new Date(Date.now() + loginResponse.expiresInSeconds * 1000).toISOString(),
       authenticatedAt: new Date().toISOString()
     });
+    const snapshot = await fetchPermissionSnapshot();
+    savePermissionSnapshot(snapshot);
     return loginResponse;
   } catch (error) {
-    throw toErrorMessage(error);
+    throw toError(error);
+  }
+}
+
+export async function logout(): Promise<void> {
+  try {
+    await api.post("/auth/logout");
+  } catch (error) {
+    if (!(axios.isAxiosError(error) && error.response?.status === 401)) {
+      throw toError(error);
+    }
+  } finally {
+    clearAuthSession();
   }
 }
 
@@ -174,7 +291,7 @@ export async function updateLoginConfig(payload: UpdateLoginConfigRequest): Prom
       ...unwrapApiResponse(response.data)
     };
   } catch (error) {
-    throw toErrorMessage(error);
+    throw toError(error);
   }
 }
 
@@ -185,7 +302,7 @@ export async function fetchOnlineSessions(limit = 100): Promise<OnlineSessionVie
     });
     return unwrapApiResponse(response.data);
   } catch (error) {
-    throw toErrorMessage(error);
+    throw toError(error);
   }
 }
 
@@ -193,7 +310,7 @@ export async function revokeOnlineSession(sid: string): Promise<void> {
   try {
     await api.post(`/auth/online-sessions/${encodeURIComponent(sid)}/revoke`);
   } catch (error) {
-    throw toErrorMessage(error);
+    throw toError(error);
   }
 }
 
@@ -201,7 +318,7 @@ export async function revokeUserSessions(userId: number): Promise<void> {
   try {
     await api.post(`/auth/users/${userId}/revoke-sessions`);
   } catch (error) {
-    throw toErrorMessage(error);
+    throw toError(error);
   }
 }
 
@@ -212,7 +329,7 @@ export async function fetchLoginLogs(limit = 100): Promise<LoginLogView[]> {
     });
     return unwrapApiResponse(response.data);
   } catch (error) {
-    throw toErrorMessage(error);
+    throw toError(error);
   }
 }
 
@@ -223,7 +340,7 @@ export async function fetchTickets(): Promise<DemoTicket[]> {
     seedTicketMetaIfNeeded(records.map((ticket: TicketRecord) => ({ ticketNo: ticket.ticketNo })));
     return mergeTickets(records);
   } catch (error) {
-    throw toErrorMessage(error);
+    throw toError(error);
   }
 }
 
@@ -234,7 +351,7 @@ export async function createTicket(payload: CreateTicketRequest): Promise<DemoTi
     seedTicketMetaIfNeeded([{ ticketNo: ticket.ticketNo }]);
     return mergeTickets([ticket])[0];
   } catch (error) {
-    throw toErrorMessage(error);
+    throw toError(error);
   }
 }
 
@@ -243,7 +360,7 @@ export async function markTicketProcessing(ticketId: number): Promise<TicketActi
     const response = await api.post<TicketActionResponse>(`/tickets/${ticketId}/processing`);
     return unwrapApiResponse(response.data);
   } catch (error) {
-    throw toErrorMessage(error);
+    throw toError(error);
   }
 }
 
@@ -252,8 +369,240 @@ export async function markTicketResolved(ticketId: number): Promise<TicketAction
     const response = await api.post<TicketActionResponse>(`/tickets/${ticketId}/resolved`);
     return unwrapApiResponse(response.data);
   } catch (error) {
-    throw toErrorMessage(error);
+    throw toError(error);
   }
+}
+
+export type UpsertIamResourcePayload = {
+  resourceType?: string;
+  resourceCode?: string;
+  resourceName?: string;
+  clientScope?: string;
+  httpMethod?: string | null;
+  pathPattern?: string | null;
+  status?: number;
+};
+
+export async function fetchIamResources(params?: {
+  resourceType?: string;
+  clientScope?: string;
+}): Promise<IamResource[]> {
+  try {
+    const response = await api.get<IamResource[]>("/iam/resources", { params });
+    return unwrapApiResponse(response.data);
+  } catch (error) {
+    throw toError(error);
+  }
+}
+
+export async function createIamResource(payload: UpsertIamResourcePayload): Promise<IamResource> {
+  try {
+    const response = await api.post<IamResource>("/iam/resources", payload);
+    return unwrapApiResponse(response.data);
+  } catch (error) {
+    throw toError(error);
+  }
+}
+
+export async function updateIamResource(id: number, payload: UpsertIamResourcePayload): Promise<IamResource> {
+  try {
+    const response = await api.put<IamResource>(`/iam/resources/${id}`, payload);
+    return unwrapApiResponse(response.data);
+  } catch (error) {
+    throw toError(error);
+  }
+}
+
+export async function fetchRoleResources(roleId: number): Promise<IamResource[]> {
+  try {
+    const response = await api.get<IamResource[]>(`/iam/roles/${roleId}/resources`);
+    return unwrapApiResponse(response.data);
+  } catch (error) {
+    throw toError(error);
+  }
+}
+
+export async function replaceRoleResources(roleId: number, resourceIds: number[]): Promise<IamResource[]> {
+  try {
+    const response = await api.put<IamResource[]>(`/iam/roles/${roleId}/resources`, { resourceIds });
+    return unwrapApiResponse(response.data);
+  } catch (error) {
+    throw toError(error);
+  }
+}
+
+export async function fetchMyMenuResources(): Promise<IamResource[]> {
+  try {
+    const response = await api.get<IamResource[]>("/iam/me/menu-resources");
+    return unwrapApiResponse(response.data);
+  } catch (error) {
+    throw toError(error);
+  }
+}
+
+export async function fetchPermissionSnapshot(): Promise<PermissionSnapshot> {
+  try {
+    const response = await api.get<PermissionSnapshot>("/iam/me/permission-snapshot");
+    return unwrapApiResponse(response.data);
+  } catch (error) {
+    throw toError(error);
+  }
+}
+
+export async function fetchMenusTree(clientScope?: string): Promise<MenuTreeNode[]> {
+  try {
+    const response = await api.get<MenuTreeNode[]>("/iam/menus/tree", {
+      params: clientScope ? { clientScope } : undefined
+    });
+    return unwrapApiResponse(response.data);
+  } catch (error) {
+    throw toError(error);
+  }
+}
+
+export async function createMenu(payload: CreateMenuPayload): Promise<IamResource> {
+  try {
+    const response = await api.post<IamResource>("/iam/menus", payload);
+    return unwrapApiResponse(response.data);
+  } catch (error) {
+    throw toError(error);
+  }
+}
+
+export async function updateMenu(id: number, payload: UpdateMenuPayload): Promise<IamResource> {
+  try {
+    const response = await api.put<IamResource>(`/iam/menus/${id}`, payload);
+    return unwrapApiResponse(response.data);
+  } catch (error) {
+    throw toError(error);
+  }
+}
+
+export async function deleteMenu(id: number): Promise<void> {
+  try {
+    await api.delete(`/iam/menus/${id}`);
+  } catch (error) {
+    throw toError(error);
+  }
+}
+
+export async function fetchRoles(): Promise<IamRole[]> {
+  try {
+    const response = await api.get<IamRole[]>("/iam/roles");
+    return unwrapApiResponse(response.data);
+  } catch (error) {
+    throw toError(error);
+  }
+}
+
+export async function createRole(payload: CreateRolePayload): Promise<IamRole> {
+  try {
+    const response = await api.post<IamRole>("/iam/roles", payload);
+    return unwrapApiResponse(response.data);
+  } catch (error) {
+    throw toError(error);
+  }
+}
+
+export async function updateRole(roleId: number, payload: UpdateRolePayload): Promise<IamRole> {
+  try {
+    const response = await api.put<IamRole>(`/iam/roles/${roleId}`, payload);
+    return unwrapApiResponse(response.data);
+  } catch (error) {
+    throw toError(error);
+  }
+}
+
+export async function deleteRole(roleId: number): Promise<void> {
+  try {
+    await api.delete(`/iam/roles/${roleId}`);
+  } catch (error) {
+    throw toError(error);
+  }
+}
+
+export async function fetchRolePermissions(roleId: number): Promise<RolePermissions> {
+  try {
+    const response = await api.get<RolePermissions>(`/iam/roles/${roleId}/permissions`);
+    return unwrapApiResponse(response.data);
+  } catch (error) {
+    throw toError(error);
+  }
+}
+
+export async function updateRolePermissions(roleId: number, payload: UpdateRolePermissionsPayload): Promise<RolePermissions> {
+  try {
+    const response = await api.put<RolePermissions>(`/iam/roles/${roleId}/permissions`, payload);
+    return unwrapApiResponse(response.data);
+  } catch (error) {
+    throw toError(error);
+  }
+}
+
+export async function fetchUsers(): Promise<IamUser[]> {
+  try {
+    const response = await api.get<IamUser[]>("/iam/users");
+    return unwrapApiResponse(response.data);
+  } catch (error) {
+    throw toError(error);
+  }
+}
+
+export async function createUser(payload: CreateIamUserPayload): Promise<IamUser> {
+  try {
+    const response = await api.post<IamUser>("/iam/users", payload);
+    return unwrapApiResponse(response.data);
+  } catch (error) {
+    throw toError(error);
+  }
+}
+
+export async function updateUser(userId: number, payload: UpdateIamUserPayload): Promise<IamUser> {
+  try {
+    const response = await api.put<IamUser>(`/iam/users/${userId}`, payload);
+    return unwrapApiResponse(response.data);
+  } catch (error) {
+    throw toError(error);
+  }
+}
+
+export async function offboardUser(userId: number, reason?: string): Promise<IamUser> {
+  try {
+    const response = await api.post<IamUser>(`/iam/users/${userId}/offboard`, { reason });
+    return unwrapApiResponse(response.data);
+  } catch (error) {
+    throw toError(error);
+  }
+}
+
+export async function restoreUser(userId: number): Promise<IamUser> {
+  try {
+    const response = await api.post<IamUser>(`/iam/users/${userId}/restore`);
+    return unwrapApiResponse(response.data);
+  } catch (error) {
+    throw toError(error);
+  }
+}
+
+export async function fetchOffboardPoolUsers(): Promise<IamUser[]> {
+  try {
+    const response = await api.get<IamUser[]>("/iam/users/offboard-pool");
+    return unwrapApiResponse(response.data);
+  } catch (error) {
+    throw toError(error);
+  }
+}
+
+export async function deleteUser(userId: number): Promise<void> {
+  try {
+    await api.delete(`/iam/users/${userId}`);
+  } catch (error) {
+    throw toError(error);
+  }
+}
+
+export function getCachedPermissionSnapshot(): PermissionSnapshot | null {
+  return loadPermissionSnapshot();
 }
 
 export function loadConsultationSessions(domainId: number, customerId?: number): ConsultationSessionSummary[] {

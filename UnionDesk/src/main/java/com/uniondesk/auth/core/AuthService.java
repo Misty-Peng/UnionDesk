@@ -1,6 +1,7 @@
 package com.uniondesk.auth.core;
 
 import com.uniondesk.auth.core.LoginAccountService.LoginAccount;
+import com.uniondesk.auth.core.AuthClientService.AuthClient;
 import com.uniondesk.auth.core.LoginAuditService.LoginLog;
 import com.uniondesk.auth.core.LoginConfigService.LoginConfig;
 import com.uniondesk.auth.core.LoginSessionService.OnlineSession;
@@ -8,6 +9,7 @@ import com.uniondesk.auth.web.AuthDtos;
 import com.uniondesk.common.demo.DemoDataService;
 import com.uniondesk.common.demo.DemoDtos.BusinessDomainView;
 import com.uniondesk.common.demo.DemoDtos.LoginUserView;
+import com.uniondesk.iam.core.IamService;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -25,9 +27,11 @@ import org.springframework.util.StringUtils;
 public class AuthService {
 
     private final LoginAccountService loginAccountService;
+    private final AuthClientService authClientService;
     private final LoginConfigService loginConfigService;
     private final LoginSessionService loginSessionService;
     private final LoginAuditService loginAuditService;
+    private final IamService iamService;
     private final JwtTokenService jwtTokenService;
     private final PasswordEncoder passwordEncoder;
     private final DemoDataService demoDataService;
@@ -35,24 +39,37 @@ public class AuthService {
 
     public AuthService(
             LoginAccountService loginAccountService,
+            AuthClientService authClientService,
             LoginConfigService loginConfigService,
             LoginSessionService loginSessionService,
             LoginAuditService loginAuditService,
+            IamService iamService,
             JwtTokenService jwtTokenService,
             PasswordEncoder passwordEncoder,
             DemoDataService demoDataService,
             Clock clock) {
         this.loginAccountService = loginAccountService;
+        this.authClientService = authClientService;
         this.loginConfigService = loginConfigService;
         this.loginSessionService = loginSessionService;
         this.loginAuditService = loginAuditService;
+        this.iamService = iamService;
         this.jwtTokenService = jwtTokenService;
         this.passwordEncoder = passwordEncoder;
         this.demoDataService = demoDataService;
         this.clock = clock;
     }
 
-    public AuthDtos.LoginResponse login(AuthDtos.LoginRequest request, String clientIp, String userAgent) {
+    public AuthDtos.LoginResponse login(AuthDtos.LoginRequest request, String clientCode, String clientIp, String userAgent) {
+        if (!StringUtils.hasText(clientCode)) {
+            throw new IllegalArgumentException("missing client code");
+        }
+        AuthClient authClient = authClientService.findByCode(clientCode)
+                .orElseThrow(() -> new AuthenticationFailedException("invalid client"));
+        if (authClient.status() != 1) {
+            throw new AuthenticationFailedException("invalid client");
+        }
+
         LoginIdentifierType identifierType = LoginIdentifierType.detect(request.username());
         LoginConfig config = loginConfigService.loadConfig();
         if (!isIdentifierTypeEnabled(config, identifierType) || !config.passwordLoginEnabled()) {
@@ -74,11 +91,13 @@ public class AuthService {
         if (account.status() != 1) {
             throw failLogin(account.id(), account.username(), identifierType, request.username(), "account_disabled", clientIp, userAgent);
         }
+        if ("offboarded".equalsIgnoreCase(account.employmentStatus())) {
+            throw failLogin(account.id(), account.username(), identifierType, request.username(), "account_offboarded", clientIp, userAgent);
+        }
         if (!passwordEncoder.matches(request.password(), account.passwordHash())) {
             throw failLogin(account.id(), account.username(), identifierType, request.username(), "password_mismatch", clientIp, userAgent);
         }
-
-        List<String> roles = loginAccountService.loadRoleCodes(account.id());
+        List<String> roles = iamService.listUserRoleCodesByClient(account.id(), authClient.clientCode());
         if (roles.isEmpty()) {
             throw failLogin(account.id(), account.username(), identifierType, request.username(), "roles_missing", clientIp, userAgent);
         }
@@ -90,12 +109,13 @@ public class AuthService {
                 : accessibleDomains.get(0).id();
 
         String sid = UUID.randomUUID().toString();
-        UserContext userContext = new UserContext(account.id(), effectiveRole, defaultBusinessDomainId, sid);
+        UserContext userContext = new UserContext(account.id(), effectiveRole, defaultBusinessDomainId, sid, authClient.clientCode());
         LocalDateTime sessionExpiresAt = LocalDateTime.now(clock).plusSeconds(config.sessionTtlSeconds());
         String refreshToken = jwtTokenService.issueRefreshToken(userContext);
         loginSessionService.createSession(new LoginSessionService.CreateSessionCommand(
                 sid,
                 account.id(),
+                authClient.clientCode(),
                 effectiveRole,
                 defaultBusinessDomainId,
                 maskIdentifier(request.username(), identifierType),
@@ -117,6 +137,7 @@ public class AuthService {
                 refreshToken,
                 sid,
                 effectiveRole,
+                authClient.clientCode(),
                 "Bearer",
                 jwtTokenService.accessTokenTtl().toSeconds(),
                 new LoginUserView(account.id(), account.username(), account.mobile(), account.email(), roles),
@@ -129,7 +150,8 @@ public class AuthService {
                 context.userId(),
                 context.role(),
                 context.businessDomainId(),
-                context.sessionId());
+                context.sessionId(),
+                context.clientCode());
     }
 
     public void logoutCurrentSession(UserContext context, String clientIp, String userAgent) {

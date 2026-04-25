@@ -1,6 +1,7 @@
 package com.uniondesk.auth.web;
 
 import com.uniondesk.auth.core.AuthService;
+import com.uniondesk.auth.core.AuthClientHeaders;
 import com.uniondesk.auth.core.LoginAuditService.LoginLog;
 import com.uniondesk.auth.core.LoginConfigService.LoginConfig;
 import com.uniondesk.auth.core.LoginConfigService.UpdateLoginConfigCommand;
@@ -20,6 +21,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestHeader;
 
 @RestController
 @RequestMapping("/api/v1/auth")
@@ -32,8 +34,11 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public AuthDtos.LoginResponse login(@Valid @RequestBody AuthDtos.LoginRequest request, HttpServletRequest httpRequest) {
-        return authService.login(request, httpRequest.getRemoteAddr(), httpRequest.getHeader("User-Agent"));
+    public AuthDtos.LoginResponse login(
+            @Valid @RequestBody AuthDtos.LoginRequest request,
+            @RequestHeader(AuthClientHeaders.CLIENT_CODE_HEADER) String clientCode,
+            HttpServletRequest httpRequest) {
+        return authService.login(request, clientCode, httpRequest.getRemoteAddr(), httpRequest.getHeader("User-Agent"));
     }
 
     @GetMapping("/login-config")
@@ -125,6 +130,7 @@ public class AuthController {
         return new AuthDtos.OnlineSessionView(
                 session.sid(),
                 session.userId(),
+                session.clientCode(),
                 session.username(),
                 session.mobile(),
                 session.email(),

@@ -20,8 +20,8 @@
 ```text
 UnionDeskWeb/
 ├─ apps/
-│  ├─ customer-web/    # 客户侧应用
-│  └─ admin-web/       # 管理端应用
+│  ├─ UnionDeskCustomerWeb/    # 客户侧应用
+│  └─ UnionDeskAdminWeb/       # 管理端应用
 ├─ packages/
 │  └─ shared/          # 共享类型与 API 封装
 ├─ package.json
@@ -69,3 +69,13 @@ pnpm build
 - 开发环境下，Vite 会把 `/api/*` 代理到 `http://localhost:8080`
 - 共享请求封装位于 `packages/shared/src/api.ts`
 - 当前版本先保证核心流程可运行，后续可继续拆分路由、状态管理和自动化测试
+## 编码规范
+
+- 前端文本文件统一使用 **UTF-8（无 BOM）**。
+- 提交前请先执行：
+
+`powershell
+pnpm run check:utf8
+`
+
+- lint 与 lint:admin 已接入 check:utf8，检测到非 UTF-8 或 BOM 将直接失败。

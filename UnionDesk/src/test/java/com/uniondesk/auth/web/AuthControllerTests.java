@@ -34,7 +34,11 @@ class AuthControllerTests {
     @Test
     void loginFailureMapsToUnauthorized() throws Exception {
         AuthService authService = org.mockito.Mockito.mock(AuthService.class);
-        when(authService.login(org.mockito.ArgumentMatchers.any(AuthDtos.LoginRequest.class), org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString()))
+        when(authService.login(
+                org.mockito.ArgumentMatchers.any(AuthDtos.LoginRequest.class),
+                org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.anyString()))
                 .thenThrow(new AuthenticationFailedException("invalid credentials"));
         MockMvc mockMvc = MockMvcBuilders.standaloneSetup(new AuthController(authService))
                 .setControllerAdvice(new com.uniondesk.common.web.ApiExceptionHandler())
@@ -42,6 +46,7 @@ class AuthControllerTests {
 
         mockMvc.perform(post("/api/v1/auth/login")
                         .contentType("application/json")
+                        .header("X-UD-Client-Code", "ud-customer-web")
                         .header("User-Agent", "JUnit")
                         .content("{\"username\":\"customer\",\"password\":\"wrong\"}"))
                 .andExpect(status().isUnauthorized())
@@ -53,16 +58,17 @@ class AuthControllerTests {
     void sessionReturnsCurrentContext() throws Exception {
         AuthService authService = mock(AuthService.class);
         MockMvc mockMvc = mockMvc(authService);
-        UserContextHolder.set(new UserContext(2L, "super_admin", 10L, "sid-123"));
+        UserContextHolder.set(new UserContext(2L, "super_admin", 10L, "sid-123", "ud-admin-web"));
         when(authService.currentSession(any(UserContext.class)))
-                .thenReturn(new AuthDtos.SessionView(2L, "super_admin", 10L, "sid-123"));
+                .thenReturn(new AuthDtos.SessionView(2L, "super_admin", 10L, "sid-123", "ud-admin-web"));
 
         mockMvc.perform(get("/api/v1/auth/session"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.userId").value(2))
                 .andExpect(jsonPath("$.role").value("super_admin"))
                 .andExpect(jsonPath("$.businessDomainId").value(10))
-                .andExpect(jsonPath("$.sid").value("sid-123"));
+                .andExpect(jsonPath("$.sid").value("sid-123"))
+                .andExpect(jsonPath("$.clientCode").value("ud-admin-web"));
     }
 
     @Test
@@ -77,7 +83,7 @@ class AuthControllerTests {
     void updateLoginConfigReturnsNewFlagsForAdmin() throws Exception {
         AuthService authService = mock(AuthService.class);
         MockMvc mockMvc = mockMvc(authService);
-        UserContextHolder.set(new UserContext(2L, "super_admin", 10L, "sid-123"));
+        UserContextHolder.set(new UserContext(2L, "super_admin", 10L, "sid-123", "ud-admin-web"));
         when(authService.updateConfig(any()))
                 .thenReturn(new LoginConfig(
                         true,
@@ -114,7 +120,7 @@ class AuthControllerTests {
     void updateLoginConfigRejectsNonAdminContext() throws Exception {
         AuthService authService = mock(AuthService.class);
         MockMvc mockMvc = mockMvc(authService);
-        UserContextHolder.set(new UserContext(1L, "customer", 10L, "sid-123"));
+        UserContextHolder.set(new UserContext(1L, "customer", 10L, "sid-123", "ud-customer-web"));
 
         mockMvc.perform(put("/api/v1/auth/login-config")
                         .contentType("application/json")
@@ -126,10 +132,11 @@ class AuthControllerTests {
     void listOnlineSessionsReturnsRowsForAdmin() throws Exception {
         AuthService authService = mock(AuthService.class);
         MockMvc mockMvc = mockMvc(authService);
-        UserContextHolder.set(new UserContext(2L, "super_admin", 10L, "sid-123"));
+        UserContextHolder.set(new UserContext(2L, "super_admin", 10L, "sid-123", "ud-admin-web"));
         when(authService.listOnlineSessions(25)).thenReturn(List.of(new OnlineSession(
                 "sid-1",
                 1L,
+                "ud-customer-web",
                 "customer",
                 "13800000000",
                 "customer@uniondesk.local",
@@ -147,6 +154,7 @@ class AuthControllerTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].sid").value("sid-1"))
                 .andExpect(jsonPath("$[0].username").value("customer"))
+                .andExpect(jsonPath("$[0].clientCode").value("ud-customer-web"))
                 .andExpect(jsonPath("$[0].sessionStatus").value("active"));
     }
 
@@ -154,7 +162,7 @@ class AuthControllerTests {
     void revokeSessionReturnsNotFoundWhenSidMissing() throws Exception {
         AuthService authService = mock(AuthService.class);
         MockMvc mockMvc = mockMvc(authService);
-        UserContextHolder.set(new UserContext(2L, "super_admin", 10L, "sid-123"));
+        UserContextHolder.set(new UserContext(2L, "super_admin", 10L, "sid-123", "ud-admin-web"));
         when(authService.revokeSession("sid-404", "admin_revoke", "127.0.0.1", "JUnit")).thenReturn(0);
 
         mockMvc.perform(post("/api/v1/auth/online-sessions/sid-404/revoke")
@@ -166,7 +174,7 @@ class AuthControllerTests {
     void revokeSessionsByUserSucceedsForAdmin() throws Exception {
         AuthService authService = mock(AuthService.class);
         MockMvc mockMvc = mockMvc(authService);
-        UserContextHolder.set(new UserContext(2L, "super_admin", 10L, "sid-123"));
+        UserContextHolder.set(new UserContext(2L, "super_admin", 10L, "sid-123", "ud-admin-web"));
         when(authService.revokeSessionsByUser(1L, "admin_revoke_all", "127.0.0.1", "JUnit")).thenReturn(2);
 
         mockMvc.perform(post("/api/v1/auth/users/1/revoke-sessions")
@@ -179,7 +187,7 @@ class AuthControllerTests {
     void listLoginLogsReturnsRowsForAdmin() throws Exception {
         AuthService authService = mock(AuthService.class);
         MockMvc mockMvc = mockMvc(authService);
-        UserContextHolder.set(new UserContext(2L, "super_admin", 10L, "sid-123"));
+        UserContextHolder.set(new UserContext(2L, "super_admin", 10L, "sid-123", "ud-admin-web"));
         when(authService.listLoginLogs(10)).thenReturn(List.of(new LoginLog(
                 1L,
                 "sid-1",

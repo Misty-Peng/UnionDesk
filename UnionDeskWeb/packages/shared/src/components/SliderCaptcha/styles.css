@@ -1,0 +1,134 @@
+/**
+ * SliderCaptcha 组件样式
+ */
+
+/* 容器 */
+.slider-captcha-container {
+  position: relative;
+  width: 100%;
+  height: 40px;
+  background-color: #fafafa;
+  border-radius: 4px;
+  border: 1px solid #d9d9d9;
+  overflow: hidden;
+  user-select: none;
+  cursor: default;
+}
+
+.slider-captcha-container.disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* 已滑动区域 */
+.slider-captcha-track {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  background-color: #e6f7ff;
+  border-right: 2px solid #1890ff;
+  transition: none;
+}
+
+.slider-captcha-track.success {
+  background-color: #f6ffed;
+  border-right-color: #52c41a;
+}
+
+.slider-captcha-track.fail {
+  background-color: #fff1f0;
+  border-right-color: #ff4d4f;
+}
+
+.slider-captcha-track.idle {
+  background-color: transparent;
+  border-right: none;
+}
+
+/* 未滑动区域 */
+.slider-captcha-untracked {
+  position: absolute;
+  top: 0;
+  right: 0;
+  height: 100%;
+  background-image: repeating-linear-gradient(
+    45deg,
+    transparent,
+    transparent 10px,
+    rgba(0, 0, 0, 0.03) 10px,
+    rgba(0, 0, 0, 0.03) 20px
+  );
+  pointer-events: none;
+}
+
+/* 提示文字 */
+.slider-captcha-text {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #999;
+  font-size: 14px;
+  font-weight: 500;
+  pointer-events: none;
+  transition: color 0.3s;
+}
+
+.slider-captcha-text.success {
+  color: #52c41a;
+}
+
+.slider-captcha-text.fail {
+  color: #ff4d4f;
+}
+
+/* 滑块 */
+.slider-captcha-slider {
+  position: absolute;
+  top: 0;
+  width: 40px;
+  height: 100%;
+  background-color: #fff;
+  border-radius: 4px;
+  box-shadow: 0 0 8px rgba(0, 0, 0, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  transition: left 0.3s ease;
+  touch-action: none;
+}
+
+.slider-captcha-slider.moving {
+  transition: none;
+  cursor: grabbing;
+}
+
+.slider-captcha-slider.success,
+.slider-captcha-slider.disabled {
+  cursor: not-allowed;
+}
+
+/* 滑块图标 */
+.slider-captcha-icon {
+  width: 20px;
+  height: 20px;
+  stroke: #999;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: none;
+}
+
+.slider-captcha-icon.success {
+  stroke: #52c41a;
+}
+
+.slider-captcha-icon.fail {
+  stroke: #ff4d4f;
+}

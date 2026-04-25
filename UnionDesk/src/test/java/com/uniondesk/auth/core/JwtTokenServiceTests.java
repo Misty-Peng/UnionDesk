@@ -20,7 +20,7 @@ class JwtTokenServiceTests {
 
     @Test
     void issueAndParseAccessToken() {
-        UserContext expected = new UserContext(42L, "super_admin", 7L, "sid-42");
+        UserContext expected = new UserContext(42L, "super_admin", 7L, "sid-42", "ud-admin-web");
 
         String token = jwtTokenService.issueAccessToken(expected);
 
@@ -31,7 +31,7 @@ class JwtTokenServiceTests {
 
     @Test
     void rejectTamperedAccessToken() {
-        String token = jwtTokenService.issueAccessToken(new UserContext(42L, "agent", 7L, "sid-42"));
+        String token = jwtTokenService.issueAccessToken(new UserContext(42L, "agent", 7L, "sid-42", "ud-admin-web"));
         String tampered = token.substring(0, token.length() - 1) + (token.endsWith("A") ? "B" : "A");
 
         assertThatThrownBy(() -> jwtTokenService.parseAccessToken(tampered))

@@ -67,6 +67,7 @@ public class JwtTokenService {
         claims.put("uid", context.userId());
         claims.put("sid", context.sessionId());
         claims.put("role", context.role());
+        claims.put("cid", context.clientCode());
         claims.put("typ", tokenType);
         if (context.businessDomainId() != null) {
             claims.put("bd", context.businessDomainId());
@@ -96,8 +97,9 @@ public class JwtTokenService {
         long userId = longClaim(claims, "uid");
         String role = stringClaim(claims, "role");
         String sessionId = stringClaim(claims, "sid");
+        String clientCode = stringClaim(claims, "cid");
         Long businessDomainId = optionalLongClaim(claims, "bd");
-        return new UserContext(userId, role, businessDomainId, sessionId);
+        return new UserContext(userId, role, businessDomainId, sessionId, clientCode);
     }
 
     private String sign(Map<String, Object> claims) {

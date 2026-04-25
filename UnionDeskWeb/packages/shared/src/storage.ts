@@ -5,6 +5,7 @@ import {
   type ConsultationMessage,
   type ConsultationSessionSummary,
   type DemoProfile,
+  type PermissionSnapshot,
   type DemoTicket,
   type TicketMeta
 } from "./types";
@@ -13,8 +14,8 @@ const TICKET_META_KEY = "uniondesk.demo.ticket-meta";
 const CONSULTATION_STATE_KEY = "uniondesk.demo.consultation-state";
 const CUSTOMER_PROFILE_KEY = "uniondesk.demo.customer-profile";
 const ADMIN_PROFILE_KEY = "uniondesk.demo.admin-profile";
-const ACCESS_TOKEN_KEY = "uniondesk.auth.access-token";
 const AUTH_SESSION_KEY = "uniondesk.auth.session";
+const PERMISSION_SNAPSHOT_KEY = "uniondesk.auth.permission-snapshot";
 
 const seedMeta: Record<string, TicketMeta> = {
   T202604190001: {
@@ -34,8 +35,11 @@ type DemoConsultationState = {
 type TicketMetaStore = Record<string, TicketMeta>;
 
 type StorageLike = Pick<Storage, "getItem" | "setItem">;
+type PersistedAuthSessionState = Omit<AuthSessionState, "accessToken" | "refreshToken">;
 
 const memoryStore = new Map<string, string>();
+let inMemoryAccessToken = "";
+let inMemoryRefreshToken = "";
 const memoryStorage: StorageLike = {
   getItem(key: string) {
     return memoryStore.get(key) ?? null;
@@ -196,32 +200,66 @@ export function saveAdminProfile(profile: AdminProfile): AdminProfile {
 }
 
 export function loadAccessToken(): string {
-  return getStorage().getItem(ACCESS_TOKEN_KEY) ?? "";
+  return inMemoryAccessToken;
 }
 
 export function saveAccessToken(token: string): string {
   const normalized = token.trim();
-  if (normalized) {
-    getStorage().setItem(ACCESS_TOKEN_KEY, normalized);
-  } else {
-    getStorage().setItem(ACCESS_TOKEN_KEY, "");
-  }
+  inMemoryAccessToken = normalized;
+  return normalized;
+}
+
+export function loadRefreshToken(): string {
+  return inMemoryRefreshToken;
+}
+
+export function saveRefreshToken(token: string): string {
+  const normalized = token.trim();
+  inMemoryRefreshToken = normalized;
   return normalized;
 }
 
 export function loadAuthSession(): AuthSessionState | null {
-  return readJson<AuthSessionState | null>(AUTH_SESSION_KEY, null);
+  const session = readJson<PersistedAuthSessionState | null>(AUTH_SESSION_KEY, null);
+  if (!session) {
+    return null;
+  }
+  if (!session.clientCode) {
+    return null;
+  }
+  return {
+    ...session,
+    accessToken: inMemoryAccessToken,
+    refreshToken: inMemoryRefreshToken
+  };
 }
 
 export function saveAuthSession(session: AuthSessionState): AuthSessionState {
-  saveAccessToken(session.accessToken);
-  writeJson(AUTH_SESSION_KEY, session);
-  return session;
+  const accessToken = saveAccessToken(session.accessToken);
+  const refreshToken = saveRefreshToken(session.refreshToken);
+  const { accessToken: _, refreshToken: __, ...persistedSession } = session;
+  writeJson<PersistedAuthSessionState>(AUTH_SESSION_KEY, persistedSession);
+  return {
+    ...persistedSession,
+    accessToken,
+    refreshToken
+  };
 }
 
 export function clearAuthSession(): void {
   saveAccessToken("");
+  saveRefreshToken("");
   writeJson<AuthSessionState | null>(AUTH_SESSION_KEY, null);
+  writeJson<PermissionSnapshot | null>(PERMISSION_SNAPSHOT_KEY, null);
+}
+
+export function loadPermissionSnapshot(): PermissionSnapshot | null {
+  return readJson<PermissionSnapshot | null>(PERMISSION_SNAPSHOT_KEY, null);
+}
+
+export function savePermissionSnapshot(snapshot: PermissionSnapshot): PermissionSnapshot {
+  writeJson<PermissionSnapshot>(PERMISSION_SNAPSHOT_KEY, snapshot);
+  return snapshot;
 }
 
 export function loadTicketMeta(ticketNo: string): TicketMeta {
