@@ -19,6 +19,8 @@ export interface VerifyResult {
   message?: string;
 }
 
+export type SliderCaptchaVerifier = (track: TrackPoint[]) => Promise<VerifyResult> | VerifyResult;
+
 /**
  * 滑块验证组件属性
  */
@@ -32,6 +34,11 @@ export interface SliderCaptchaProps {
    * 验证失败回调
    */
   onFail?: (message: string) => void;
+
+  /**
+   * 自定义校验器，用于接入后端验证码校验
+   */
+  verifier?: SliderCaptchaVerifier;
 
   /**
    * 自定义宽度

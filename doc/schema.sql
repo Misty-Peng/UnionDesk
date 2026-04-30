@@ -1,4 +1,4 @@
--- UnionDesk MVP schema
+-- UnionDesk final schema
 -- MySQL 8.0+
 -- Encoding: UTF-8
 
@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS `business_domain` (
 
 CREATE TABLE IF NOT EXISTS `user_account` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `username` varchar(64) NOT NULL COMMENT '登录名',
   `mobile` varchar(20) NOT NULL COMMENT '手机号',
   `email` varchar(128) DEFAULT NULL,
   `password_hash` varchar(255) NOT NULL,
@@ -38,16 +39,90 @@ CREATE TABLE IF NOT EXISTS `user_account` (
   `nickname` varchar(64) DEFAULT NULL,
   `avatar_url` varchar(255) DEFAULT NULL,
   `status` tinyint NOT NULL DEFAULT 1 COMMENT '1=启用 0=禁用',
+  `employment_status` varchar(16) NOT NULL DEFAULT 'active' COMMENT 'active/paused/offboarded',
   `last_login_at` datetime(3) DEFAULT NULL,
   `last_login_ip` varchar(45) DEFAULT NULL,
+  `offboarded_at` datetime(3) DEFAULT NULL,
+  `offboarded_by` bigint unsigned DEFAULT NULL,
+  `offboard_reason` varchar(255) DEFAULT NULL,
   `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   `updated_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
   `deleted_at` datetime(3) DEFAULT NULL,
   PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_user_username` (`username`),
   UNIQUE KEY `uk_user_mobile` (`mobile`),
   UNIQUE KEY `uk_user_email` (`email`),
-  KEY `idx_user_status` (`status`)
+  KEY `idx_user_status` (`status`),
+  KEY `idx_user_employment_status` (`employment_status`, `status`),
+  CONSTRAINT `fk_user_account_offboarded_by` FOREIGN KEY (`offboarded_by`) REFERENCES `user_account` (`id`) ON DELETE SET NULL ON UPDATE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户表';
+
+CREATE TABLE IF NOT EXISTS `auth_login_config` (
+  `config_key` varchar(64) NOT NULL,
+  `config_value` varchar(255) NOT NULL,
+  `updated_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`config_key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='登录配置';
+
+INSERT INTO `auth_login_config` (`config_key`, `config_value`)
+VALUES
+  ('password_login_enabled', 'true'),
+  ('username_login_enabled', 'true'),
+  ('email_login_enabled', 'true'),
+  ('mobile_login_enabled', 'true'),
+  ('session_ttl_seconds', '604800'),
+  ('max_active_sessions_per_user', '10'),
+  ('captcha_enabled', 'true'),
+  ('captcha_hint', '请按住滑块，拖动到最右边'),
+  ('wechat_login_enabled', 'false'),
+  ('wechat_hint', '')
+ON DUPLICATE KEY UPDATE
+  `config_value` = VALUES(`config_value`),
+  `updated_at` = CURRENT_TIMESTAMP(3);
+
+CREATE TABLE IF NOT EXISTS `auth_login_session` (
+  `sid` char(36) NOT NULL,
+  `user_id` bigint unsigned NOT NULL,
+  `role_code` varchar(32) NOT NULL,
+  `business_domain_id` bigint unsigned DEFAULT NULL,
+  `login_identifier_masked` varchar(128) NOT NULL,
+  `session_status` varchar(16) NOT NULL DEFAULT 'active',
+  `issued_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `expires_at` datetime(3) NOT NULL,
+  `last_seen_at` datetime(3) DEFAULT NULL,
+  `revoked_at` datetime(3) DEFAULT NULL,
+  `revoked_reason` varchar(255) DEFAULT NULL,
+  `refresh_token_hash` char(64) DEFAULT NULL,
+  `client_ip` varchar(64) DEFAULT NULL,
+  `user_agent` varchar(255) DEFAULT NULL,
+  PRIMARY KEY (`sid`),
+  KEY `idx_auth_login_session_user_status` (`user_id`, `session_status`, `expires_at`),
+  KEY `idx_auth_login_session_status_expires` (`session_status`, `expires_at`),
+  KEY `idx_auth_login_session_last_seen` (`last_seen_at`),
+  CONSTRAINT `fk_auth_login_session_user` FOREIGN KEY (`user_id`) REFERENCES `user_account` (`id`) ON DELETE RESTRICT ON UPDATE RESTRICT,
+  CONSTRAINT `fk_auth_login_session_domain` FOREIGN KEY (`business_domain_id`) REFERENCES `business_domain` (`id`) ON DELETE RESTRICT ON UPDATE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='登录会话';
+
+CREATE TABLE IF NOT EXISTS `auth_login_log` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `sid` char(36) DEFAULT NULL,
+  `user_id` bigint unsigned DEFAULT NULL,
+  `username` varchar(64) DEFAULT NULL,
+  `login_identifier_masked` varchar(128) NOT NULL,
+  `login_identifier_type` varchar(16) NOT NULL,
+  `event_type` varchar(32) NOT NULL,
+  `result` varchar(16) NOT NULL,
+  `reason` varchar(255) DEFAULT NULL,
+  `client_ip` varchar(64) DEFAULT NULL,
+  `user_agent` varchar(255) DEFAULT NULL,
+  `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`id`),
+  KEY `idx_auth_login_log_sid_created` (`sid`, `created_at`),
+  KEY `idx_auth_login_log_user_created` (`user_id`, `created_at`),
+  KEY `idx_auth_login_log_event_created` (`event_type`, `created_at`),
+  CONSTRAINT `fk_auth_login_log_session` FOREIGN KEY (`sid`) REFERENCES `auth_login_session` (`sid`) ON DELETE RESTRICT ON UPDATE RESTRICT,
+  CONSTRAINT `fk_auth_login_log_user` FOREIGN KEY (`user_id`) REFERENCES `user_account` (`id`) ON DELETE RESTRICT ON UPDATE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='登录日志';
 
 CREATE TABLE IF NOT EXISTS `role` (
   `id` int unsigned NOT NULL AUTO_INCREMENT,
@@ -112,6 +187,111 @@ CREATE TABLE IF NOT EXISTS `customer_business_domain_access` (
   CONSTRAINT `fk_cda_domain` FOREIGN KEY (`business_domain_id`) REFERENCES `business_domain` (`id`) ON DELETE RESTRICT ON UPDATE RESTRICT,
   CONSTRAINT `fk_cda_approved_by` FOREIGN KEY (`approved_by`) REFERENCES `user_account` (`id`) ON DELETE SET NULL ON UPDATE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='客户业务域可见授权';
+
+CREATE TABLE IF NOT EXISTS `iam_permission` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `code` varchar(128) NOT NULL COMMENT '机器权限编码',
+  `name` varchar(128) NOT NULL COMMENT '中文权限名称',
+  `description` varchar(255) NOT NULL COMMENT '中文权限说明',
+  `permission_scope` varchar(16) NOT NULL COMMENT 'platform/domain',
+  `resource_code` varchar(128) NOT NULL COMMENT '资源机器编码',
+  `action_code` varchar(64) NOT NULL COMMENT '动作机器编码',
+  `http_method` varchar(16) DEFAULT NULL COMMENT '接口方法',
+  `path_pattern` varchar(255) DEFAULT NULL COMMENT '接口路径模式',
+  `status` tinyint NOT NULL DEFAULT 1,
+  `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `updated_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_iam_permission_code` (`code`),
+  KEY `idx_iam_permission_scope_status` (`permission_scope`, `status`),
+  KEY `idx_iam_permission_route` (`http_method`, `path_pattern`),
+  CONSTRAINT `chk_iam_permission_scope` CHECK (`permission_scope` IN ('platform', 'domain')),
+  CONSTRAINT `chk_iam_permission_route`
+    CHECK (((`http_method` IS NULL) AND (`path_pattern` IS NULL)) OR ((`http_method` IS NOT NULL) AND (`path_pattern` IS NOT NULL)))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='权限元数据';
+
+CREATE TABLE IF NOT EXISTS `iam_role_permission` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `role_id` int unsigned NOT NULL,
+  `permission_id` bigint unsigned NOT NULL,
+  `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_iam_role_permission` (`role_id`, `permission_id`),
+  KEY `idx_iam_role_permission_permission` (`permission_id`),
+  CONSTRAINT `fk_iam_role_permission_role` FOREIGN KEY (`role_id`) REFERENCES `role` (`id`) ON DELETE RESTRICT ON UPDATE RESTRICT,
+  CONSTRAINT `fk_iam_role_permission_permission` FOREIGN KEY (`permission_id`) REFERENCES `iam_permission` (`id`) ON DELETE RESTRICT ON UPDATE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='角色权限关系';
+
+CREATE TABLE IF NOT EXISTS `iam_role_binding` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `user_id` bigint unsigned NOT NULL,
+  `role_id` int unsigned NOT NULL,
+  `binding_scope` varchar(16) NOT NULL COMMENT 'global/domain',
+  `business_domain_id` bigint unsigned DEFAULT NULL,
+  `business_domain_key` bigint unsigned GENERATED ALWAYS AS (COALESCE(`business_domain_id`, 0)) STORED,
+  `granted_by` bigint unsigned DEFAULT NULL,
+  `effective_from` datetime(3) DEFAULT NULL,
+  `effective_to` datetime(3) DEFAULT NULL,
+  `status` tinyint NOT NULL DEFAULT 1,
+  `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `updated_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_iam_role_binding_scope` (`user_id`, `role_id`, `binding_scope`, `business_domain_key`),
+  KEY `idx_iam_role_binding_user_status` (`user_id`, `status`),
+  KEY `idx_iam_role_binding_role` (`role_id`),
+  KEY `idx_iam_role_binding_domain` (`business_domain_id`),
+  CONSTRAINT `fk_iam_role_binding_user` FOREIGN KEY (`user_id`) REFERENCES `user_account` (`id`) ON DELETE RESTRICT ON UPDATE RESTRICT,
+  CONSTRAINT `fk_iam_role_binding_role` FOREIGN KEY (`role_id`) REFERENCES `role` (`id`) ON DELETE RESTRICT ON UPDATE RESTRICT,
+  CONSTRAINT `fk_iam_role_binding_domain` FOREIGN KEY (`business_domain_id`) REFERENCES `business_domain` (`id`) ON DELETE RESTRICT ON UPDATE RESTRICT,
+  CONSTRAINT `fk_iam_role_binding_granted_by` FOREIGN KEY (`granted_by`) REFERENCES `user_account` (`id`) ON DELETE SET NULL ON UPDATE RESTRICT,
+  CONSTRAINT `chk_iam_role_binding_scope` CHECK (`binding_scope` IN ('global', 'domain')),
+  CONSTRAINT `chk_iam_role_binding_domain`
+    CHECK (((`binding_scope` = 'global') AND (`business_domain_id` IS NULL)) OR ((`binding_scope` = 'domain') AND (`business_domain_id` IS NOT NULL)))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='统一角色绑定';
+
+CREATE TABLE IF NOT EXISTS `iam_admin_menu` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `code` varchar(64) NOT NULL COMMENT 'Admin 菜单业务编码',
+  `node_type` varchar(16) NOT NULL COMMENT 'catalog/menu/button',
+  `name` varchar(128) NOT NULL COMMENT '节点名称',
+  `route_path` varchar(255) DEFAULT NULL COMMENT '菜单路由，仅菜单使用',
+  `component_key` varchar(255) DEFAULT NULL COMMENT '前端组件标识，仅菜单使用',
+  `permission_code` varchar(128) DEFAULT NULL COMMENT '访问权限编码，仅按钮使用',
+  `parent_id` bigint unsigned DEFAULT NULL,
+  `order_no` int NOT NULL DEFAULT 0,
+  `icon` varchar(64) DEFAULT NULL,
+  `hidden` tinyint NOT NULL DEFAULT 0,
+  `status` tinyint NOT NULL DEFAULT 1,
+  `required` tinyint NOT NULL DEFAULT 0 COMMENT '1=默认查询按钮',
+  `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `updated_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_iam_admin_menu_code` (`code`),
+  UNIQUE KEY `uk_iam_admin_menu_route_path` (`route_path`),
+  UNIQUE KEY `uk_iam_admin_menu_permission_code` (`permission_code`),
+  KEY `idx_iam_admin_menu_parent_order` (`parent_id`, `order_no`, `id`),
+  KEY `idx_iam_admin_menu_type_status` (`node_type`, `status`),
+  CONSTRAINT `fk_iam_admin_menu_parent` FOREIGN KEY (`parent_id`) REFERENCES `iam_admin_menu` (`id`) ON DELETE RESTRICT ON UPDATE RESTRICT,
+  CONSTRAINT `chk_iam_admin_menu_node_type` CHECK (`node_type` IN ('catalog', 'menu', 'button')),
+  CONSTRAINT `chk_iam_admin_menu_catalog_fields`
+    CHECK ((`node_type` <> 'catalog') OR (`route_path` IS NULL AND `component_key` IS NULL AND `permission_code` IS NULL AND `required` = 0)),
+  CONSTRAINT `chk_iam_admin_menu_menu_fields`
+    CHECK ((`node_type` <> 'menu') OR (`route_path` IS NOT NULL AND `component_key` IS NOT NULL AND `permission_code` IS NULL)),
+  CONSTRAINT `chk_iam_admin_menu_button_fields`
+    CHECK ((`node_type` <> 'button') OR (`route_path` IS NULL AND `component_key` IS NULL AND `permission_code` IS NOT NULL))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Admin 菜单树';
+
+CREATE TABLE IF NOT EXISTS `iam_admin_role_menu_relation` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `role_id` int unsigned NOT NULL,
+  `menu_id` bigint unsigned NOT NULL,
+  `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_iam_admin_role_menu` (`role_id`, `menu_id`),
+  KEY `idx_iam_admin_role_menu_menu_id` (`menu_id`),
+  CONSTRAINT `fk_iam_admin_role_menu_role` FOREIGN KEY (`role_id`) REFERENCES `role` (`id`) ON DELETE RESTRICT ON UPDATE RESTRICT,
+  CONSTRAINT `fk_iam_admin_role_menu_menu` FOREIGN KEY (`menu_id`) REFERENCES `iam_admin_menu` (`id`) ON DELETE RESTRICT ON UPDATE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Admin 角色菜单关系';
 
 CREATE TABLE IF NOT EXISTS `consultation_session` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT,
@@ -351,7 +531,9 @@ VALUES
   ('customer', '客户', 'domain', '客户角色', 1),
   ('agent', '客服', 'domain', '客服角色', 1),
   ('domain_admin', '业务域管理员', 'domain', '域内配置与权限管理', 1),
-  ('super_admin', '超级管理员', 'global', '全局管理角色', 1)
+  ('super_admin', '超级管理员', 'global', '全局管理角色', 1),
+  ('platform_admin', '平台管理员', 'global', '平台管理入口与平台级治理角色', 1),
+  ('security_auditor', '安全审计员', 'global', '审计与只读查看角色', 1)
 ON DUPLICATE KEY UPDATE
   `name` = VALUES(`name`),
   `scope` = VALUES(`scope`),

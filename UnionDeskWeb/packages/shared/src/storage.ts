@@ -1,5 +1,6 @@
 import {
   type AuthSessionState,
+  type AuthPersistMode,
   DEMO_DOMAINS,
   type AdminProfile,
   type ConsultationMessage,
@@ -15,6 +16,7 @@ const CONSULTATION_STATE_KEY = "uniondesk.demo.consultation-state";
 const CUSTOMER_PROFILE_KEY = "uniondesk.demo.customer-profile";
 const ADMIN_PROFILE_KEY = "uniondesk.demo.admin-profile";
 const AUTH_SESSION_KEY = "uniondesk.auth.session";
+const AUTH_TOKEN_KEY = "uniondesk.auth.token";
 const PERMISSION_SNAPSHOT_KEY = "uniondesk.auth.permission-snapshot";
 
 const seedMeta: Record<string, TicketMeta> = {
@@ -34,8 +36,20 @@ type DemoConsultationState = {
 
 type TicketMetaStore = Record<string, TicketMeta>;
 
-type StorageLike = Pick<Storage, "getItem" | "setItem">;
+type StorageLike = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 type PersistedAuthSessionState = Omit<AuthSessionState, "accessToken" | "refreshToken">;
+type LegacyPersistedAuthSessionState = PersistedAuthSessionState &
+  Partial<Pick<AuthSessionState, "accessToken" | "refreshToken">>;
+type PersistedAuthTokenState = {
+  accessToken: string;
+  refreshToken: string;
+};
+type SaveAuthSessionOptions = {
+  persistMode?: AuthPersistMode;
+};
+type SavePermissionSnapshotOptions = {
+  persistMode?: AuthPersistMode;
+};
 
 const memoryStore = new Map<string, string>();
 let inMemoryAccessToken = "";
@@ -46,18 +60,29 @@ const memoryStorage: StorageLike = {
   },
   setItem(key: string, value: string) {
     memoryStore.set(key, value);
+  },
+  removeItem(key: string) {
+    memoryStore.delete(key);
   }
 };
 
-function getStorage(): StorageLike {
-  if (typeof window !== "undefined" && window.localStorage) {
-    return window.localStorage;
+function normalizePersistMode(mode?: AuthPersistMode): AuthPersistMode {
+  return mode === "session" ? "session" : "local";
+}
+
+function getStorage(mode: AuthPersistMode = "local"): StorageLike {
+  if (typeof window !== "undefined") {
+    if (mode === "session" && window.sessionStorage) {
+      return window.sessionStorage;
+    }
+    if (mode === "local" && window.localStorage) {
+      return window.localStorage;
+    }
   }
   return memoryStorage;
 }
 
-function readJson<T>(key: string, fallback: T): T {
-  const storage = getStorage();
+function readJsonFromStorage<T>(storage: StorageLike, key: string, fallback: T): T {
   const raw = storage.getItem(key);
   if (!raw) {
     return fallback;
@@ -69,8 +94,62 @@ function readJson<T>(key: string, fallback: T): T {
   }
 }
 
-function writeJson<T>(key: string, value: T): void {
-  getStorage().setItem(key, JSON.stringify(value));
+function writeJsonToStorage<T>(storage: StorageLike, key: string, value: T): void {
+  storage.setItem(key, JSON.stringify(value));
+}
+
+function removeJsonFromStorage(storage: StorageLike, key: string): void {
+  storage.removeItem(key);
+}
+
+function readJson<T>(key: string, fallback: T, mode: AuthPersistMode = "local"): T {
+  return readJsonFromStorage(getStorage(mode), key, fallback);
+}
+
+function writeJson<T>(key: string, value: T, mode: AuthPersistMode = "local"): void {
+  writeJsonToStorage(getStorage(mode), key, value);
+}
+
+function clearAuthStorageByMode(mode: AuthPersistMode, includePermissionSnapshot: boolean): void {
+  const storage = getStorage(mode);
+  removeJsonFromStorage(storage, AUTH_SESSION_KEY);
+  removeJsonFromStorage(storage, AUTH_TOKEN_KEY);
+  if (includePermissionSnapshot) {
+    removeJsonFromStorage(storage, PERMISSION_SNAPSHOT_KEY);
+  }
+}
+
+function clearAllPersistedAuth(includePermissionSnapshot: boolean): void {
+  clearAuthStorageByMode("local", includePermissionSnapshot);
+  clearAuthStorageByMode("session", includePermissionSnapshot);
+}
+
+function persistAuthTokens(mode: AuthPersistMode, accessToken: string, refreshToken: string): void {
+  writeJsonToStorage<PersistedAuthTokenState>(getStorage(mode), AUTH_TOKEN_KEY, {
+    accessToken,
+    refreshToken
+  });
+}
+
+function readPersistedAuthFromMode(mode: AuthPersistMode): AuthSessionState | null {
+  const storage = getStorage(mode);
+  const persistedSession = readJsonFromStorage<LegacyPersistedAuthSessionState | null>(storage, AUTH_SESSION_KEY, null);
+  if (!persistedSession) {
+    return null;
+  }
+  const persistedTokens = readJsonFromStorage<PersistedAuthTokenState | null>(storage, AUTH_TOKEN_KEY, null);
+  const accessToken = (persistedTokens?.accessToken ?? persistedSession.accessToken ?? "").trim();
+  const refreshToken = (persistedTokens?.refreshToken ?? persistedSession.refreshToken ?? "").trim();
+  if (!persistedSession.clientCode || !accessToken || !refreshToken) {
+    clearAuthStorageByMode(mode, true);
+    return null;
+  }
+  return {
+    ...persistedSession,
+    accessToken,
+    refreshToken,
+    persistMode: normalizePersistMode(persistedSession.persistMode ?? mode)
+  };
 }
 
 function nowIso(): string {
@@ -200,6 +279,12 @@ export function saveAdminProfile(profile: AdminProfile): AdminProfile {
 }
 
 export function loadAccessToken(): string {
+  if (!inMemoryAccessToken) {
+    const session = loadAuthSession();
+    if (session?.accessToken) {
+      inMemoryAccessToken = session.accessToken;
+    }
+  }
   return inMemoryAccessToken;
 }
 
@@ -210,6 +295,12 @@ export function saveAccessToken(token: string): string {
 }
 
 export function loadRefreshToken(): string {
+  if (!inMemoryRefreshToken) {
+    const session = loadAuthSession();
+    if (session?.refreshToken) {
+      inMemoryRefreshToken = session.refreshToken;
+    }
+  }
   return inMemoryRefreshToken;
 }
 
@@ -220,45 +311,60 @@ export function saveRefreshToken(token: string): string {
 }
 
 export function loadAuthSession(): AuthSessionState | null {
-  const session = readJson<PersistedAuthSessionState | null>(AUTH_SESSION_KEY, null);
-  if (!session) {
+  const persistedSession = readPersistedAuthFromMode("session") ?? readPersistedAuthFromMode("local");
+  if (!persistedSession) {
     return null;
   }
-  if (!session.clientCode) {
-    return null;
-  }
-  return {
-    ...session,
-    accessToken: inMemoryAccessToken,
-    refreshToken: inMemoryRefreshToken
-  };
+  inMemoryAccessToken = persistedSession.accessToken;
+  inMemoryRefreshToken = persistedSession.refreshToken;
+  return persistedSession;
 }
 
-export function saveAuthSession(session: AuthSessionState): AuthSessionState {
+export function saveAuthSession(session: AuthSessionState, options?: SaveAuthSessionOptions): AuthSessionState {
+  const persistMode = normalizePersistMode(options?.persistMode ?? session.persistMode);
   const accessToken = saveAccessToken(session.accessToken);
   const refreshToken = saveRefreshToken(session.refreshToken);
-  const { accessToken: _, refreshToken: __, ...persistedSession } = session;
-  writeJson<PersistedAuthSessionState>(AUTH_SESSION_KEY, persistedSession);
+  const { accessToken: _, refreshToken: __, persistMode: ___, ...persistedSessionBase } = session;
+  const persistedSession: PersistedAuthSessionState = {
+    ...persistedSessionBase,
+    persistMode
+  };
+  clearAllPersistedAuth(true);
+  writeJsonToStorage<PersistedAuthSessionState>(getStorage(persistMode), AUTH_SESSION_KEY, persistedSession);
+  persistAuthTokens(persistMode, accessToken, refreshToken);
   return {
     ...persistedSession,
     accessToken,
-    refreshToken
+    refreshToken,
+    persistMode
   };
 }
 
 export function clearAuthSession(): void {
   saveAccessToken("");
   saveRefreshToken("");
-  writeJson<AuthSessionState | null>(AUTH_SESSION_KEY, null);
-  writeJson<PermissionSnapshot | null>(PERMISSION_SNAPSHOT_KEY, null);
+  clearAllPersistedAuth(true);
 }
 
 export function loadPermissionSnapshot(): PermissionSnapshot | null {
-  return readJson<PermissionSnapshot | null>(PERMISSION_SNAPSHOT_KEY, null);
+  const session = loadAuthSession();
+  if (!session) {
+    return null;
+  }
+  const preferredMode = normalizePersistMode(session.persistMode);
+  const preferredSnapshot = readJson<PermissionSnapshot | null>(PERMISSION_SNAPSHOT_KEY, null, preferredMode);
+  if (preferredSnapshot) {
+    return preferredSnapshot;
+  }
+  const fallbackMode = preferredMode === "local" ? "session" : "local";
+  return readJson<PermissionSnapshot | null>(PERMISSION_SNAPSHOT_KEY, null, fallbackMode);
 }
 
-export function savePermissionSnapshot(snapshot: PermissionSnapshot): PermissionSnapshot {
-  writeJson<PermissionSnapshot>(PERMISSION_SNAPSHOT_KEY, snapshot);
+export function savePermissionSnapshot(snapshot: PermissionSnapshot, options?: SavePermissionSnapshotOptions): PermissionSnapshot {
+  const mode = normalizePersistMode(options?.persistMode ?? loadAuthSession()?.persistMode);
+  // Ensure snapshot only exists in the active persist mode.
+  removeJsonFromStorage(getStorage(mode === "local" ? "session" : "local"), PERMISSION_SNAPSHOT_KEY);
+  writeJson<PermissionSnapshot>(PERMISSION_SNAPSHOT_KEY, snapshot, mode);
   return snapshot;
 }
 

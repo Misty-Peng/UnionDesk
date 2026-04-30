@@ -1,203 +1,161 @@
-import { LinkOutlined } from '@ant-design/icons';
-import type { Settings as LayoutSettings } from '@ant-design/pro-components';
-import { SettingDrawer } from '@ant-design/pro-components';
-import type { RequestConfig, RunTimeLayoutConfig } from '@umijs/max';
-import { history, Link } from '@umijs/max';
-import React from 'react';
-import {
-  AvatarDropdown,
-  AvatarName,
-  Footer,
-  Question,
-  SelectLang,
-} from '@/components';
-import type { PermissionSnapshot } from '@uniondesk/shared';
-import {
-  fetchPermissionSnapshot,
-  getCachedPermissionSnapshot,
-  loadAuthSession,
-  setClientCode,
-} from '@uniondesk/shared';
-import defaultSettings from '../config/defaultSettings';
-import { errorConfig } from './requestErrorConfig';
+import { AntdApp } from "#src/components/antd-app";
+import { JSSThemeProvider } from "#src/components/jss-theme-provider";
+import { usePreferences } from "#src/hooks/use-preferences";
+import { useScrollToHash } from "#src/hooks/use-scroll-to-hash";
+import { AppVersionMonitor } from "#src/layout/widgets/version-monitor";
+import { ANT_DESIGN_LOCALE } from "#src/locales";
 
-const isDev = process.env.NODE_ENV === 'development' || process.env.CI;
-const loginPath = '/user/login';
-setClientCode('ud-admin-web');
+import { StyleProvider } from "@ant-design/cssinjs";
+import { theme as antdTheme, ConfigProvider } from "antd";
+import dayjs from "dayjs";
+import { Suspense, useCallback, useEffect } from "react";
+import { useTranslation } from "react-i18next";
+import { RouterProvider } from "react-router/dom";
 
-/**
- * @see https://umijs.org/docs/api/runtime-config#getinitialstate
- * */
-export async function getInitialState(): Promise<{
-  settings?: Partial<LayoutSettings>;
-  currentUser?: API.CurrentUser;
-  permissionSnapshot?: PermissionSnapshot | null;
-  loading?: boolean;
-  fetchUserInfo?: () => Promise<API.CurrentUser | undefined>;
-}> {
-  const resolveCurrentUser = (): API.CurrentUser | undefined => {
-    const session = loadAuthSession();
-    if (!session) {
-      return undefined;
-    }
-    return {
-      name: session.username,
-      access: session.role === 'admin' || session.role === 'super_admin' ? 'admin' : 'user',
-      userid: String(session.userId ?? ''),
-    };
-  };
+import { router } from "./router";
+import { customAntdDarkTheme, customAntdLightTheme } from "./styles/theme/antd/antd-theme";
+import "dayjs/locale/zh-cn";
 
-  const fetchUserInfo = async () => {
-    const currentUser = resolveCurrentUser();
-    if (!currentUser) {
-      history.push(loginPath);
-    }
-    return currentUser;
-  };
-  const resolvePermissionSnapshot = async (): Promise<PermissionSnapshot | null> => {
-    const session = loadAuthSession();
-    if (!session) {
-      return null;
-    }
-    try {
-      return await fetchPermissionSnapshot();
-    } catch {
-      return getCachedPermissionSnapshot();
-    }
-  };
-  // 如果不是登录页面，执行
-  const { location } = history;
-  if (
-    ![loginPath, '/user/register', '/user/register-result'].includes(
-      location.pathname,
-    )
-  ) {
-    const currentUser = await fetchUserInfo();
-    const permissionSnapshot = await resolvePermissionSnapshot();
-    return {
-      fetchUserInfo,
-      currentUser,
-      permissionSnapshot,
-      settings: defaultSettings as Partial<LayoutSettings>,
-    };
-  }
-  return {
-    fetchUserInfo,
-    permissionSnapshot: getCachedPermissionSnapshot(),
-    settings: defaultSettings as Partial<LayoutSettings>,
-  };
+export default function App() {
+	const { i18n } = useTranslation();
+	const {
+		language,
+		isDark,
+		theme,
+		themeColorPrimary,
+		colorBlindMode,
+		colorGrayMode,
+		themeRadius,
+		changeSiteTheme,
+
+		enableCheckUpdates,
+		checkUpdatesInterval,
+		sideCollapsedWidth,
+	} = usePreferences();
+
+	useScrollToHash();
+
+	/**
+	 * ant design internationalization
+	 * @link https://ant.design/docs/react/i18n
+	 */
+	const getAntdLocale = () => {
+		return ANT_DESIGN_LOCALE[language as keyof typeof ANT_DESIGN_LOCALE];
+	};
+
+	/**
+	 * day.js internationalization
+	 * @link https://day.js.org/docs/en/installation/installation
+	 */
+	useEffect(() => {
+		if (language === "en-US") {
+			dayjs.locale("en");
+		}
+		else if (language === "zh-CN") {
+			dayjs.locale("zh-cn");
+		}
+	}, [language]);
+
+	/**
+	 * react-i18next internationalization
+	 * @link https://www.i18next.com/overview/api#changelanguage
+	 */
+	useEffect(() => {
+		i18n.changeLanguage(language);
+	}, [language, i18n.changeLanguage]);
+
+	/**
+	 * Change theme when the system theme changes
+	 */
+	const setEmulateTheme = useCallback(
+		// eslint-disable-next-line unused-imports/no-unused-vars
+		(dark?: boolean) => {
+			changeSiteTheme("auto");
+		},
+		[changeSiteTheme],
+	);
+
+	/**
+	 * Watch system theme change
+	 */
+	useEffect(() => {
+		if (theme === "auto") {
+			// https://developer.chrome.com/docs/devtools/rendering/emulate-css/
+			const darkModeMediaQuery = window.matchMedia(
+				"(prefers-color-scheme: dark)",
+			);
+
+			function matchMode(e: MediaQueryListEvent) {
+				setEmulateTheme(e.matches);
+			}
+
+			setEmulateTheme(darkModeMediaQuery.matches);
+			darkModeMediaQuery.addEventListener("change", matchMode);
+			return () => {
+				darkModeMediaQuery.removeEventListener("change", matchMode);
+			};
+		}
+	}, [theme, setEmulateTheme]);
+
+	/**
+	 * 更新页面颜色模式（灰色、色弱）
+	 */
+	const updateColorMode = () => {
+		const dom = document.documentElement;
+		const COLOR_BLIND = "color-blind-mode";
+		const COLOR_GRAY = "gray-mode";
+		colorBlindMode
+			? dom.classList.add(COLOR_BLIND)
+			: dom.classList.remove(COLOR_BLIND);
+		colorGrayMode
+			? dom.classList.add(COLOR_GRAY)
+			: dom.classList.remove(COLOR_GRAY);
+	};
+
+	useEffect(() => {
+		updateColorMode();
+	}, [colorBlindMode, colorGrayMode]);
+
+	return (
+		<StyleProvider layer>
+			<ConfigProvider
+				input={{ autoComplete: "off" }}
+				locale={getAntdLocale()}
+				theme={{
+					cssVar: {},
+					hashed: false,
+					algorithm:
+						isDark
+							? antdTheme.darkAlgorithm
+							: antdTheme.defaultAlgorithm,
+					...(isDark ? customAntdDarkTheme : customAntdLightTheme),
+					token: {
+						...(isDark ? customAntdDarkTheme.token : customAntdLightTheme.token),
+						borderRadius: themeRadius,
+						colorPrimary: themeColorPrimary,
+					},
+					components: {
+						...(isDark ? customAntdDarkTheme.components : customAntdLightTheme.components),
+						Menu: {
+							darkItemBg: "#141414",
+							itemBg: "#fff",
+							...(isDark
+								? customAntdDarkTheme.components?.Menu
+								: customAntdLightTheme.components?.Menu),
+							collapsedWidth: sideCollapsedWidth,
+						},
+					},
+				}}
+			>
+				<AntdApp>
+					<JSSThemeProvider>
+						<Suspense fallback={null}>
+							{enableCheckUpdates ? <AppVersionMonitor checkUpdatesInterval={checkUpdatesInterval} /> : null}
+							<RouterProvider router={router} />
+						</Suspense>
+					</JSSThemeProvider>
+				</AntdApp>
+			</ConfigProvider>
+		</StyleProvider>
+	);
 }
-
-// ProLayout 支持的api https://procomponents.ant.design/components/layout
-export const layout: RunTimeLayoutConfig = ({
-  initialState,
-  setInitialState,
-}) => {
-  const visibleMenuPaths = new Set(
-    (initialState?.permissionSnapshot?.menus ?? []).map((menu) => menu.path),
-  );
-  visibleMenuPaths.add('/dashboard/home');
-  const filterMenuData = (menuData: any[]): any[] =>
-    menuData
-      .map((item) => {
-        const children = item.children ? filterMenuData(item.children) : undefined;
-        const currentPath = item.path as string | undefined;
-        if (children && children.length > 0) {
-          return { ...item, children };
-        }
-        if (!currentPath) {
-          return item;
-        }
-        return visibleMenuPaths.has(currentPath) ? item : null;
-      })
-      .filter(Boolean) as any[];
-  return {
-    actionsRender: () => [
-      <Question key="doc" />,
-      <SelectLang key="SelectLang" />,
-    ],
-    avatarProps: {
-      src: initialState?.currentUser?.avatar,
-      title: <AvatarName />,
-      render: (_, avatarChildren) => {
-        return <AvatarDropdown>{avatarChildren}</AvatarDropdown>;
-      },
-    },
-    waterMarkProps: {
-      content: initialState?.currentUser?.name,
-    },
-    footerRender: () => <Footer />,
-    onPageChange: () => {
-      const { location } = history;
-      // 如果没有登录，重定向到 login
-      if (!initialState?.currentUser && location.pathname !== loginPath) {
-        history.push(loginPath);
-      }
-    },
-    bgLayoutImgList: [
-      {
-        src: 'https://mdn.alipayobjects.com/yuyan_qk0oxh/afts/img/D2LWSqNny4sAAAAAAAAAAAAAFl94AQBr',
-        left: 85,
-        bottom: 100,
-        height: '303px',
-      },
-      {
-        src: 'https://mdn.alipayobjects.com/yuyan_qk0oxh/afts/img/C2TWRpJpiC0AAAAAAAAAAAAAFl94AQBr',
-        bottom: -68,
-        right: -45,
-        height: '303px',
-      },
-      {
-        src: 'https://mdn.alipayobjects.com/yuyan_qk0oxh/afts/img/F6vSTbj8KpYAAAAAAAAAAAAAFl94AQBr',
-        bottom: 0,
-        left: 0,
-        width: '331px',
-      },
-    ],
-    links: isDev
-      ? [
-          <Link key="openapi" to="/umi/plugin/openapi" target="_blank">
-            <LinkOutlined />
-            <span>OpenAPI 文档</span>
-          </Link>,
-        ]
-      : [],
-    menuHeaderRender: undefined,
-    menuDataRender: (menuData) => filterMenuData(menuData),
-    // 自定义 403 页面
-    // unAccessible: <div>unAccessible</div>,
-    // 增加一个 loading 的状态
-    childrenRender: (children) => {
-      // if (initialState?.loading) return <PageLoading />;
-      return (
-        <>
-          {children}
-          {isDev && (
-            <SettingDrawer
-              disableUrlParams
-              enableDarkTheme
-              settings={initialState?.settings}
-              onSettingChange={(settings) => {
-                setInitialState((preInitialState) => ({
-                  ...preInitialState,
-                  settings,
-                }));
-              }}
-            />
-          )}
-        </>
-      );
-    },
-    ...initialState?.settings,
-  };
-};
-
-/**
- * @name request 配置，可以配置错误处理
- * 它基于 axios 和 ahooks 的 useRequest 提供了一套统一的网络请求和错误处理方案。
- * @doc https://umijs.org/docs/max/request#配置
- */
-export const request: RequestConfig = {
-  baseURL: '/api',
-  ...errorConfig,
-};

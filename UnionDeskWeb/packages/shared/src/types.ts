@@ -7,6 +7,31 @@ export type ClientCode = "ud-admin-web" | "ud-customer-web" | string;
 export type LoginRequest = {
   username: string;
   password: string;
+  captchaToken?: string;
+};
+
+export type CaptchaTrackPoint = {
+  x: number;
+  t: number;
+};
+
+export type CaptchaChallengeResponse = {
+  challengeId: string;
+  expiresInSeconds: number;
+};
+
+export type CaptchaVerifyRequest = {
+  challengeId: string;
+  track: CaptchaTrackPoint[];
+};
+
+export type CaptchaVerifyResponse = {
+  captchaToken: string;
+  expiresInSeconds: number;
+};
+
+export type AuthPublicKeyResponse = {
+  publicKey: string;
 };
 
 export type LoginResponse = {
@@ -48,6 +73,8 @@ export type AuthSessionStatus = {
   expiresAt?: string | null;
 };
 
+export type AuthPersistMode = "local" | "session";
+
 export type AuthSessionState = {
   username: string;
   accessToken: string;
@@ -55,6 +82,7 @@ export type AuthSessionState = {
   role: string;
   clientCode: ClientCode;
   authenticatedAt: string;
+  persistMode?: AuthPersistMode;
   sid?: string | null;
   userId?: number | null;
   businessDomainId?: number | null;
@@ -174,6 +202,7 @@ export type PermissionSnapshotMenu = {
 
 export type PermissionSnapshotAction = {
   code: string;
+  name?: string;
   httpMethod?: string | null;
   pathPattern?: string | null;
 };
@@ -191,27 +220,37 @@ export type PermissionSnapshot = {
 export type MenuTreeNode = {
   id: number;
   code: string;
+  nodeType: "catalog" | "menu" | "button" | string;
   name: string;
-  path: string;
-  clientScope: ClientCode | "all" | string;
+  routePath?: string | null;
+  componentKey?: string | null;
+  permissionCode?: string | null;
   parentId?: number | null;
   orderNo: number;
   icon?: string | null;
-  component?: string | null;
   hidden: boolean;
   status: number;
+  required: boolean;
   children: MenuTreeNode[];
 };
 
+export type AdminPermissionCode = {
+  code: string;
+  name: string;
+  permissionScope?: "platform" | "domain" | string;
+  httpMethod: string;
+  pathPattern: string;
+};
+
 export type CreateMenuPayload = {
-  resourceCode: string;
-  resourceName: string;
-  path: string;
-  clientScope: ClientCode | "all" | string;
+  nodeType: "catalog" | "menu" | "button" | string;
+  name: string;
+  routePath?: string | null;
+  componentKey?: string | null;
+  permissionCode?: string | null;
   parentId?: number | null;
   orderNo?: number;
   icon?: string | null;
-  component?: string | null;
   hidden?: boolean;
   status?: number;
 };
@@ -236,13 +275,13 @@ export type UpdateRolePayload = Partial<CreateRolePayload>;
 
 export type RolePermissions = {
   roleId: number;
-  menuResourceIds: number[];
-  actionResourceIds: number[];
+  menuIds: number[];
+  buttonIds: number[];
 };
 
 export type UpdateRolePermissionsPayload = {
-  menuResourceIds: number[];
-  actionResourceIds: number[];
+  menuIds: number[];
+  buttonIds: number[];
 };
 
 export type IamUser = {

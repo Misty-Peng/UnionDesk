@@ -1,7 +1,15 @@
 import { LockOutlined, UserOutlined } from "@ant-design/icons";
 import { Alert, Button, Card, Form, Input, Space, Typography, message } from "antd";
-import { login, toErrorMessage } from "@uniondesk/shared";
-import { useState } from "react";
+import {
+  SliderCaptcha,
+  createCaptchaChallenge,
+  fetchLoginConfig,
+  login,
+  toErrorMessage,
+  verifyCaptcha,
+  type TrackPoint
+} from "@uniondesk/shared";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 type LoginFormValues = {
@@ -12,21 +20,73 @@ type LoginFormValues = {
 export default function LoginPage() {
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [captchaRequired, setCaptchaRequired] = useState(false);
+  const [challengeId, setChallengeId] = useState("");
+  const [captchaToken, setCaptchaToken] = useState("");
+  const [captchaVersion, setCaptchaVersion] = useState(0);
   const navigate = useNavigate();
 
+  const refreshCaptcha = async () => {
+    const challenge = await createCaptchaChallenge();
+    setChallengeId(challenge.challengeId);
+    setCaptchaToken("");
+    setCaptchaVersion((version) => version + 1);
+  };
+
+  useEffect(() => {
+    let active = true;
+    fetchLoginConfig()
+      .then(async (config) => {
+        if (!active) {
+          return;
+        }
+        setCaptchaRequired(config.captchaEnabled);
+        if (config.captchaEnabled) {
+          await refreshCaptcha();
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setCaptchaRequired(false);
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const handleCaptchaVerify = async (track: TrackPoint[]) => {
+    if (!challengeId) {
+      return { success: false, message: "验证码初始化失败，请刷新页面重试" };
+    }
+    const result = await verifyCaptcha({ challengeId, track });
+    setCaptchaToken(result.captchaToken);
+    return { success: true, token: result.captchaToken };
+  };
+
   const handleSubmit = async (values: LoginFormValues) => {
+    if (captchaRequired && !captchaToken) {
+      const messageText = "请先完成滑块验证";
+      setErrorMessage(messageText);
+      message.warning(messageText);
+      return;
+    }
     setSubmitting(true);
     setErrorMessage("");
     try {
       await login({
         username: values.username.trim(),
-        password: values.password
+        password: values.password,
+        captchaToken: captchaToken || undefined
       });
       navigate("/", { replace: true });
     } catch (error) {
       const resolved = toErrorMessage(error);
       setErrorMessage(resolved);
       message.error(resolved || "登录失败");
+      if (captchaRequired) {
+        await refreshCaptcha();
+      }
     } finally {
       setSubmitting(false);
     }
@@ -56,6 +116,15 @@ export default function LoginPage() {
             >
               <Input.Password prefix={<LockOutlined />} placeholder="请输入密码" />
             </Form.Item>
+            {captchaRequired ? (
+              <Form.Item label="安全验证" required>
+                <SliderCaptcha
+                  key={captchaVersion}
+                  verifier={handleCaptchaVerify}
+                  onFail={() => setCaptchaToken("")}
+                />
+              </Form.Item>
+            ) : null}
             <Button type="primary" htmlType="submit" loading={submitting} block>
               登录
             </Button>

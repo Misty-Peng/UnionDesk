@@ -1,7 +1,13 @@
 import axios from "axios";
 import type {
+  AdminPermissionCode,
+  AuthPublicKeyResponse,
   BackendHealthResponse,
+  CaptchaChallengeResponse,
+  CaptchaVerifyRequest,
+  CaptchaVerifyResponse,
   AuthSessionStatus,
+  AuthPersistMode,
   ClientCode,
   ConsultationMessage,
   ConsultationSessionSummary,
@@ -61,6 +67,9 @@ type ApiEnvelope<T> = {
 type RetriableRequestConfig = {
   __retried?: boolean;
   method?: string;
+};
+type LoginOptions = {
+  persistMode?: AuthPersistMode;
 };
 const CLIENT_CODE_HEADER = "X-UD-Client-Code";
 let runtimeClientCode: ClientCode | null = null;
@@ -141,6 +150,29 @@ function getApiBaseUrl(): string {
   return "/api/v1";
 }
 
+type AuthPublicKeyState = {
+  publicKeyPem: string;
+  fetchedAt: number;
+};
+
+let cachedAuthPublicKey: AuthPublicKeyState | null = null;
+const AUTH_PUBLIC_KEY_TTL_MS = 10 * 60_000;
+
+export async function fetchAuthPublicKey(forceRefresh = false): Promise<string> {
+  const now = Date.now();
+  if (!forceRefresh && cachedAuthPublicKey && now - cachedAuthPublicKey.fetchedAt < AUTH_PUBLIC_KEY_TTL_MS) {
+    return cachedAuthPublicKey.publicKeyPem;
+  }
+  const response = await api.get<AuthPublicKeyResponse>("/auth/public-key");
+  const payload = unwrapApiResponse(response.data);
+  const publicKey = (payload as AuthPublicKeyResponse | null | undefined)?.publicKey;
+  if (!publicKey || typeof publicKey !== "string" || !publicKey.trim()) {
+    throw new Error("Missing auth public key");
+  }
+  cachedAuthPublicKey = { publicKeyPem: publicKey, fetchedAt: now };
+  return publicKey;
+}
+
 function toError(error: unknown): Error {
   if (axios.isAxiosError(error)) {
     const responseData = error.response?.data as { message?: unknown } | undefined;
@@ -216,6 +248,24 @@ export async function fetchLoginConfig(): Promise<LoginConfig> {
   }
 }
 
+export async function createCaptchaChallenge(): Promise<CaptchaChallengeResponse> {
+  try {
+    const response = await api.post<CaptchaChallengeResponse>("/auth/captcha/challenge");
+    return unwrapApiResponse(response.data);
+  } catch (error) {
+    throw toError(error);
+  }
+}
+
+export async function verifyCaptcha(payload: CaptchaVerifyRequest): Promise<CaptchaVerifyResponse> {
+  try {
+    const response = await api.post<CaptchaVerifyResponse>("/auth/captcha/verify", payload);
+    return unwrapApiResponse(response.data);
+  } catch (error) {
+    throw toError(error);
+  }
+}
+
 export async function fetchSessionStatus(): Promise<AuthSessionStatus> {
   try {
     const response = await api.get<SessionView>("/auth/session");
@@ -247,11 +297,14 @@ export async function fetchSessionStatus(): Promise<AuthSessionStatus> {
   }
 }
 
-export async function login(payload: LoginRequest): Promise<LoginResponse> {
+export async function login(payload: LoginRequest, options?: LoginOptions): Promise<LoginResponse> {
   try {
-    const response = await api.post<LoginResponse>("/auth/login", payload);
+    const response = await api.post<LoginResponse>("/auth/login", {
+      ...payload,
+      password: payload.password
+    });
     const loginResponse = unwrapApiResponse(response.data);
-    saveAuthSession({
+    const session = saveAuthSession({
       username: loginResponse.user?.username ?? payload.username,
       accessToken: loginResponse.accessToken,
       refreshToken: loginResponse.refreshToken,
@@ -262,9 +315,9 @@ export async function login(payload: LoginRequest): Promise<LoginResponse> {
       businessDomainId: loginResponse.defaultBusinessDomainId ?? null,
       expiresAt: new Date(Date.now() + loginResponse.expiresInSeconds * 1000).toISOString(),
       authenticatedAt: new Date().toISOString()
-    });
+    }, options);
     const snapshot = await fetchPermissionSnapshot();
-    savePermissionSnapshot(snapshot);
+    savePermissionSnapshot(snapshot, { persistMode: session.persistMode });
     return loginResponse;
   } catch (error) {
     throw toError(error);
@@ -454,6 +507,15 @@ export async function fetchMenusTree(clientScope?: string): Promise<MenuTreeNode
     const response = await api.get<MenuTreeNode[]>("/iam/menus/tree", {
       params: clientScope ? { clientScope } : undefined
     });
+    return unwrapApiResponse(response.data);
+  } catch (error) {
+    throw toError(error);
+  }
+}
+
+export async function fetchAdminPermissionCodes(): Promise<AdminPermissionCode[]> {
+  try {
+    const response = await api.get<AdminPermissionCode[]>("/iam/admin-permission-codes");
     return unwrapApiResponse(response.data);
   } catch (error) {
     throw toError(error);

@@ -13,5 +13,8 @@
     "build": "pnpm -r build",
     "lint": "pnpm run check:utf8 && pnpm -r lint",
     "typecheck": "pnpm -r typecheck"
+  },
+  "devDependencies": {
+    "umi": "4.6.47"
   }
 }

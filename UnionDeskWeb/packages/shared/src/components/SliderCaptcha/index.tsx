@@ -8,6 +8,8 @@ import type {
   SliderCaptchaProps,
   CaptchaStatus,
   TrackPoint,
+  VerifyResult,
+  SliderCaptchaVerifier,
 } from './types';
 import { verifyTrack } from './utils';
 import './styles.css';
@@ -15,6 +17,7 @@ import './styles.css';
 const SliderCaptcha: React.FC<SliderCaptchaProps> = ({
   onSuccess,
   onFail,
+  verifier,
   width,
   height = 40,
   text = '请按住滑块，拖动到最右边',
@@ -72,7 +75,7 @@ const SliderCaptcha: React.FC<SliderCaptchaProps> = ({
   );
 
   // 结束拖动
-  const handleEnd = useCallback(() => {
+  const handleEnd = useCallback(async () => {
     if (!isDraggingRef.current) return;
 
     isDraggingRef.current = false;
@@ -81,8 +84,21 @@ const SliderCaptcha: React.FC<SliderCaptchaProps> = ({
     const isAtEnd = sliderLeft >= maxDistance * 0.95;
 
     if (isAtEnd) {
-      // 验证轨迹
-      const result = verifyTrack(trackRef.current, maxDistance);
+      const normalizedTrack = trackRef.current.map(point => ({
+        x: maxDistance > 0 ? Math.round((point.x / maxDistance) * 100) : 0,
+        t: point.t,
+      }));
+      let result: VerifyResult;
+      try {
+        result = verifier
+          ? await verifier(normalizedTrack)
+          : verifyTrack(trackRef.current, maxDistance);
+      } catch (error) {
+        result = {
+          success: false,
+          message: error instanceof Error ? error.message : failText,
+        };
+      }
 
       if (result.success && result.token) {
         setStatus('success');
@@ -102,7 +118,7 @@ const SliderCaptcha: React.FC<SliderCaptchaProps> = ({
       setSliderLeft(0);
       trackRef.current = [];
     }
-  }, [sliderLeft, maxDistance, onSuccess, onFail, failText, reset]);
+  }, [sliderLeft, maxDistance, verifier, onSuccess, onFail, failText, reset]);
 
   // 鼠标事件
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -118,7 +134,7 @@ const SliderCaptcha: React.FC<SliderCaptchaProps> = ({
   );
 
   const handleMouseUp = useCallback(() => {
-    handleEnd();
+    void handleEnd();
   }, [handleEnd]);
 
   // 触摸事件
@@ -137,7 +153,7 @@ const SliderCaptcha: React.FC<SliderCaptchaProps> = ({
   );
 
   const handleTouchEnd = useCallback(() => {
-    handleEnd();
+    void handleEnd();
   }, [handleEnd]);
 
   // 绑定全局事件
@@ -250,4 +266,4 @@ const SliderCaptcha: React.FC<SliderCaptchaProps> = ({
 };
 
 export default SliderCaptcha;
-export type { SliderCaptchaProps, CaptchaStatus };
+export type { SliderCaptchaProps, CaptchaStatus, TrackPoint, VerifyResult, SliderCaptchaVerifier };
