@@ -4,6 +4,9 @@ export const useStyles = createUseStyles(({ prefixCls, isDark }) => {
 	return {
 		basicTable: {
 			[`& .${prefixCls}-table`]: {
+				[`& .${prefixCls}-table-thead > tr > th, & .${prefixCls}-table-thead > tr > td`]: {
+					"text-align": "center",
+				},
 				[`& .${prefixCls}-table-container`]: {
 					[`& .${prefixCls}-table-content, & .${prefixCls}-table-body`]: {
 						"scrollbar-width": "thin",

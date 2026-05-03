@@ -22,6 +22,7 @@ import type {
   IamUser,
   MenuTreeNode,
   PermissionSnapshot,
+  PlatformOrganizationView,
   LoginConfig,
   LoginRequest,
   LoginResponse,
@@ -230,6 +231,15 @@ export async function fetchHealth(): Promise<BackendHealthResponse> {
 export async function fetchDomains(): Promise<BusinessDomainView[]> {
   try {
     const response = await api.get<BusinessDomainView[]>("/domains");
+    return unwrapApiResponse(response.data);
+  } catch (error) {
+    throw toError(error);
+  }
+}
+
+export async function fetchOrganizations(): Promise<PlatformOrganizationView[]> {
+  try {
+    const response = await api.get<PlatformOrganizationView[]>("/iam/organizations");
     return unwrapApiResponse(response.data);
   } catch (error) {
     throw toError(error);

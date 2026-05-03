@@ -50,6 +50,7 @@ export function buildUserInfoFromLoginUser(user: LoginUserView, roles: readonly 
 		phoneNumber: user.mobile ?? "",
 		description: "",
 		roles: normalizeAccessRoles(roles),
+		platformAccess: false,
 		menus: [],
 	};
 }
@@ -63,8 +64,13 @@ export function buildUserInfoFromPermissionSnapshot(snapshot: PermissionSnapshot
 		phoneNumber: snapshot.user.mobile ?? "",
 		description: "",
 		roles: normalizeAccessRoles(snapshot.roles),
+		platformAccess: hasPlatformAccess(snapshot),
 		menus: buildBackendRoutesFromSnapshot(snapshot.menus),
 	};
+}
+
+export function hasPlatformAccess(snapshot: PermissionSnapshot): boolean {
+	return snapshot.actions.some(action => action.code.startsWith("platform."));
 }
 
 export function buildBackendRoutesFromSnapshot(menus: readonly PermissionSnapshotMenu[]): BackendAppRouteRecordRaw[] {

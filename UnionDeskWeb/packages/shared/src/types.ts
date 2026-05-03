@@ -159,6 +159,19 @@ export type LoginLogView = {
   createdAt: string;
 };
 
+export type PlatformOrganizationView = {
+  id: number;
+  code: string;
+  name: string;
+  parentId?: number | null;
+  parentName?: string | null;
+  leaderUserId?: number | null;
+  leaderName?: string | null;
+  orderNo: number;
+  status: number;
+  remark?: string | null;
+};
+
 export type IamResource = {
   id: number;
   resourceType: "menu" | "action" | "api" | string;

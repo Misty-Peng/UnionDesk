@@ -15,7 +15,26 @@ public final class AuthDtos {
     public record LoginRequest(
             @JsonAlias({"identifier", "loginName"})
             @NotBlank String username,
-            @NotBlank String password) {
+            @NotBlank String password,
+            String captchaToken) {
+        public LoginRequest(String username, String password) {
+            this(username, password, null);
+        }
+    }
+
+    public record CaptchaChallengeResponse(
+            String challengeId,
+            long expiresInSeconds) {
+    }
+
+    public record CaptchaVerifyRequest(
+            @NotBlank String challengeId,
+            List<com.uniondesk.auth.core.AuthCaptchaService.TrackPoint> track) {
+    }
+
+    public record CaptchaVerifyResponse(
+            String captchaToken,
+            long expiresInSeconds) {
     }
 
     public record LoginResponse(

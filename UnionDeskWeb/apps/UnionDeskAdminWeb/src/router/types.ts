@@ -51,6 +51,11 @@ export interface RouteMeta {
 	hideInMenu?: boolean
 
 	/**
+	 * 是否在面包屑中隐藏，用于容器路由不进入页面层级显示
+	 */
+	hideInBreadcrumb?: boolean
+
+	/**
 	 * iframe链接，如果路由需要在iframe中加载外部页面时使用
 	 */
 	iframeLink?: string

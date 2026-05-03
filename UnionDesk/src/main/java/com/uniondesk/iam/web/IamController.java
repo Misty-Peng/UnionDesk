@@ -2,21 +2,24 @@ package com.uniondesk.iam.web;
 
 import com.uniondesk.auth.core.UserContext;
 import com.uniondesk.auth.core.UserContextHolder;
+import com.uniondesk.iam.admin.AdminMenuService;
+import com.uniondesk.iam.admin.AdminMenuService.AdminMenuNode;
+import com.uniondesk.iam.admin.AdminMenuService.CreateAdminMenuCommand;
+import com.uniondesk.iam.admin.AdminMenuService.RolePermissions;
+import com.uniondesk.iam.admin.AdminMenuService.UpdateAdminMenuCommand;
 import com.uniondesk.iam.core.IamService;
-import com.uniondesk.iam.core.IamService.CreateMenuCommand;
 import com.uniondesk.iam.core.IamService.CreateResourceCommand;
 import com.uniondesk.iam.core.IamService.CreateRoleCommand;
 import com.uniondesk.iam.core.IamService.CreateUserCommand;
 import com.uniondesk.iam.core.IamService.IamResource;
-import com.uniondesk.iam.core.IamService.MenuTreeNode;
 import com.uniondesk.iam.core.IamService.PermissionSnapshot;
-import com.uniondesk.iam.core.IamService.RolePermissions;
 import com.uniondesk.iam.core.IamService.RoleView;
-import com.uniondesk.iam.core.IamService.UpdateMenuCommand;
 import com.uniondesk.iam.core.IamService.UpdateResourceCommand;
 import com.uniondesk.iam.core.IamService.UpdateRoleCommand;
 import com.uniondesk.iam.core.IamService.UpdateUserCommand;
 import com.uniondesk.iam.core.IamService.UserAccount;
+import com.uniondesk.iam.core.PermissionCodes;
+import com.uniondesk.iam.core.RequirePermission;
 import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.http.HttpStatus;
@@ -37,9 +40,11 @@ import org.springframework.web.server.ResponseStatusException;
 public class IamController {
 
     private final IamService iamService;
+    private final AdminMenuService adminMenuService;
 
-    public IamController(IamService iamService) {
+    public IamController(IamService iamService, AdminMenuService adminMenuService) {
         this.iamService = iamService;
+        this.adminMenuService = adminMenuService;
     }
 
     @GetMapping("/resources")
@@ -112,49 +117,62 @@ public class IamController {
     @GetMapping("/menus/tree")
     public List<IamDtos.MenuTreeNodeView> listMenusTree(@RequestParam(required = false) String clientScope) {
         requireSuperAdminContext();
-        return iamService.listMenuTree(clientScope).stream().map(this::toMenuTreeNodeView).toList();
+        return adminMenuService.listMenuTree().stream().map(this::toMenuTreeNodeView).toList();
     }
 
     @PostMapping("/menus")
     @ResponseStatus(HttpStatus.CREATED)
     public IamDtos.ResourceView createMenu(@Valid @RequestBody IamDtos.CreateMenuRequest request) {
         requireSuperAdminContext();
-        IamResource resource = iamService.createMenu(new CreateMenuCommand(
-                request.resourceCode(),
-                request.resourceName(),
-                request.path(),
-                request.clientScope(),
+        AdminMenuNode node = adminMenuService.createMenu(new CreateAdminMenuCommand(
+                request.nodeType(),
+                request.name(),
+                request.routePath(),
+                request.componentKey(),
+                request.permissionCode(),
                 request.parentId(),
                 request.orderNo(),
                 request.icon(),
-                request.component(),
                 request.hidden(),
                 request.status()));
-        return toResourceView(resource);
+        return toResourceView(node);
     }
 
     @PutMapping("/menus/{menuId}")
     public IamDtos.ResourceView updateMenu(@PathVariable long menuId, @Valid @RequestBody IamDtos.UpdateMenuRequest request) {
         requireSuperAdminContext();
-        IamResource resource = iamService.updateMenu(menuId, new UpdateMenuCommand(
-                request.resourceCode(),
-                request.resourceName(),
-                request.path(),
-                request.clientScope(),
+        AdminMenuNode node = adminMenuService.updateMenu(menuId, new UpdateAdminMenuCommand(
+                request.nodeType(),
+                request.name(),
+                request.routePath(),
+                request.componentKey(),
+                request.permissionCode(),
                 request.parentId(),
                 request.orderNo(),
                 request.icon(),
-                request.component(),
                 request.hidden(),
                 request.status()));
-        return toResourceView(resource);
+        return toResourceView(node);
     }
 
     @DeleteMapping("/menus/{menuId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void deleteMenu(@PathVariable long menuId) {
         requireSuperAdminContext();
-        iamService.deleteMenu(menuId);
+        adminMenuService.deleteMenu(menuId);
+    }
+
+    @GetMapping("/admin-permission-codes")
+    public List<IamDtos.AdminPermissionCodeView> listAdminPermissionCodes() {
+        requireSuperAdminContext();
+        return adminMenuService.listPermissionCodes().stream()
+                .map(definition -> new IamDtos.AdminPermissionCodeView(
+                        definition.code(),
+                        definition.name(),
+                        definition.permissionScope(),
+                        definition.httpMethod(),
+                        definition.pathPattern()))
+                .toList();
     }
 
     @GetMapping("/roles")
@@ -188,11 +206,11 @@ public class IamController {
     @GetMapping("/roles/{roleId}/permissions")
     public IamDtos.RolePermissionsView getRolePermissions(@PathVariable int roleId) {
         requireSuperAdminContext();
-        RolePermissions permissions = iamService.loadRolePermissions(roleId);
+        RolePermissions permissions = adminMenuService.loadRolePermissions(roleId);
         return new IamDtos.RolePermissionsView(
                 permissions.roleId(),
-                permissions.menuResourceIds(),
-                permissions.actionResourceIds());
+                permissions.menuIds(),
+                permissions.buttonIds());
     }
 
     @PutMapping("/roles/{roleId}/permissions")
@@ -200,14 +218,14 @@ public class IamController {
             @PathVariable int roleId,
             @Valid @RequestBody IamDtos.ReplaceRolePermissionsRequest request) {
         requireSuperAdminContext();
-        RolePermissions permissions = iamService.replaceRolePermissions(
+        RolePermissions permissions = adminMenuService.replaceRolePermissions(
                 roleId,
-                request.menuResourceIds(),
-                request.actionResourceIds());
+                request.menuIds(),
+                request.buttonIds());
         return new IamDtos.RolePermissionsView(
                 permissions.roleId(),
-                permissions.menuResourceIds(),
-                permissions.actionResourceIds());
+                permissions.menuIds(),
+                permissions.buttonIds());
     }
 
     @GetMapping("/users")
@@ -218,8 +236,14 @@ public class IamController {
 
     @PostMapping("/users")
     @ResponseStatus(HttpStatus.CREATED)
+    @RequirePermission({PermissionCodes.PLATFORM_USER_CREATE, PermissionCodes.DOMAIN_USER_CREATE})
     public IamDtos.UserAccountView createUser(@Valid @RequestBody IamDtos.CreateUserRequest request) {
-        requireSuperAdminContext();
+        UserContext context = requireCurrentContext();
+        if (iamService.containsGlobalRole(request.roleCodes())) {
+            requirePermission(context, PermissionCodes.PLATFORM_USER_CREATE, List.of());
+        } else {
+            requirePermission(context, PermissionCodes.DOMAIN_USER_CREATE, request.businessDomainIds());
+        }
         UserAccount user = iamService.createUser(new CreateUserCommand(
                 request.username(),
                 request.mobile(),
@@ -309,7 +333,11 @@ public class IamController {
                                 menu.hidden()))
                         .toList(),
                 snapshot.actions().stream()
-                        .map(action -> new IamDtos.ActionView(action.resourceCode(), action.httpMethod(), action.pathPattern()))
+                        .map(action -> new IamDtos.ActionView(
+                                action.resourceCode(),
+                                action.resourceName(),
+                                action.httpMethod(),
+                                action.pathPattern()))
                         .toList(),
                 snapshot.issuedAt());
     }
@@ -317,6 +345,12 @@ public class IamController {
     private UserContext requireCurrentContext() {
         return UserContextHolder.current()
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "unauthorized"));
+    }
+
+    private void requirePermission(UserContext context, String permissionCode, List<Long> businessDomainIds) {
+        if (!iamService.hasPermissionForDomains(context, permissionCode, businessDomainIds)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "forbidden");
+        }
     }
 
     private UserContext requireSuperAdminContext() {
@@ -344,19 +378,38 @@ public class IamController {
                 resource.status());
     }
 
-    private IamDtos.MenuTreeNodeView toMenuTreeNodeView(MenuTreeNode node) {
-        return new IamDtos.MenuTreeNodeView(
+    private IamDtos.ResourceView toResourceView(AdminMenuNode node) {
+        return new IamDtos.ResourceView(
                 node.id(),
+                node.nodeType(),
                 node.code(),
                 node.name(),
-                node.path(),
-                node.clientScope(),
+                "ud-admin-web",
+                null,
+                node.routePath(),
                 node.parentId(),
                 node.orderNo(),
                 node.icon(),
-                node.component(),
+                node.componentKey(),
+                node.hidden(),
+                node.status());
+    }
+
+    private IamDtos.MenuTreeNodeView toMenuTreeNodeView(AdminMenuNode node) {
+        return new IamDtos.MenuTreeNodeView(
+                node.id(),
+                node.code(),
+                node.nodeType(),
+                node.name(),
+                node.routePath(),
+                node.componentKey(),
+                node.permissionCode(),
+                node.parentId(),
+                node.orderNo(),
+                node.icon(),
                 node.hidden(),
                 node.status(),
+                node.required(),
                 node.children().stream().map(this::toMenuTreeNodeView).toList());
     }
 

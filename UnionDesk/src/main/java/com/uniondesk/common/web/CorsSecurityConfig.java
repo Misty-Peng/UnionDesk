@@ -40,7 +40,7 @@ public class CorsSecurityConfig {
                 }))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                        .requestMatchers("/api/v1/auth/login", "/api/v1/auth/login-config", "/api/v1/health", "/actuator/health", "/error")
+                        .requestMatchers("/api/v1/auth/login", "/api/v1/auth/captcha/**", "/api/v1/auth/login-config", "/api/v1/health", "/actuator/health", "/error")
                         .permitAll()
                         .requestMatchers("/api/v1/**").authenticated()
                         .anyRequest().authenticated());

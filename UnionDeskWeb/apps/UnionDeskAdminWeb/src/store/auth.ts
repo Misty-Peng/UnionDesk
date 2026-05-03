@@ -1,7 +1,8 @@
 import type { AuthType, LoginInfo } from "#src/api/user/types";
 
-import { fetchLogin, fetchLogout } from "#src/api/auth";
+import { fetchLogin, fetchLogout, fetchPermissionSnapshot } from "#src/api/auth";
 import { buildUserInfoFromLoginUser } from "#src/api/user/utils";
+import { buildUserInfoFromPermissionSnapshot } from "#src/api/user/utils";
 import { useAccessStore } from "#src/store/access";
 import { useTabsStore } from "#src/store/tabs";
 import { useUserStore } from "#src/store/user";
@@ -34,7 +35,7 @@ export const useAuthStore = create<AuthType & AuthAction>()(
 
 		login: async (loginPayload) => {
 			const response = await fetchLogin(loginPayload);
-			const userInfo = buildUserInfoFromLoginUser(response.user, response.user.roles);
+			let userInfo = buildUserInfoFromLoginUser(response.user, response.user.roles);
 			const nextState: AuthType = {
 				token: response.accessToken,
 				refreshToken: response.refreshToken,
@@ -49,6 +50,17 @@ export const useAuthStore = create<AuthType & AuthAction>()(
 			set({
 				...nextState,
 			});
+			try {
+				const snapshot = await fetchPermissionSnapshot();
+				userInfo = buildUserInfoFromPermissionSnapshot(snapshot);
+			}
+			catch {
+				// 登录链路允许快照请求暂时失败，后续由鉴权守卫兜底补齐用户信息。
+			}
+			set(state => ({
+				...state,
+				user: userInfo,
+			}));
 			useUserStore.getState().setUserInfo(userInfo);
 		},
 

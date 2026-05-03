@@ -139,13 +139,13 @@ export function AuthGuard({ children }: AuthGuardProps) {
 		return children;
 	}
 
+	if (!isAccessChecked) {
+		return null;
+	}
+
 	if (!isAuthorized) {
 		hideLoading();
 		return <Navigate to={loginPath} replace />;
-	}
-
-	if (!isAccessChecked) {
-		return null;
 	}
 
 	hideLoading();

@@ -1,15 +1,19 @@
 import type { TableProps } from "antd";
+import type { IamUser } from "@uniondesk/shared";
 
+import { fetchPlatformUsers } from "#src/api/platform/iam";
 import { BasicContent } from "#src/components/basic-content";
 
 import { PlusCircleOutlined, UploadOutlined } from "@ant-design/icons";
-import { Button, Card, Col, Row, Space, Table, Tag, Typography } from "antd";
+import { Alert, Button, Card, Col, Row, Space, Table, Tag, Typography } from "antd";
+import { useEffect, useState } from "react";
 
 interface PlatformUserRow {
 	id: number;
 	username: string;
-	name: string;
-	orgName: string;
+	mobile: string;
+	email: string;
+	scopeNames: string[];
 	roles: string[];
 	status: "active" | "disabled" | "offboard";
 	lastLoginAt: string;
@@ -27,35 +31,27 @@ const statusColor: Record<PlatformUserRow["status"], string> = {
 	offboard: "warning",
 };
 
-const users: PlatformUserRow[] = [
-	{
-		id: 1,
-		username: "admin",
-		name: "平台管理员",
-		orgName: "平台运营部",
-		roles: ["platform_admin"],
-		status: "active",
-		lastLoginAt: "2026-04-30 09:21",
-	},
-	{
-		id: 2,
-		username: "auditor",
-		name: "审计人员",
-		orgName: "安全审计组",
-		roles: ["security_auditor"],
-		status: "active",
-		lastLoginAt: "2026-04-29 18:04",
-	},
-	{
-		id: 3,
-		username: "ops-disabled",
-		name: "停用账号",
-		orgName: "平台运营部",
-		roles: ["platform_operator"],
-		status: "disabled",
+function resolveUserStatus(user: IamUser): PlatformUserRow["status"] {
+	if (user.employmentStatus === "offboarded") {
+		return "offboard";
+	}
+	return user.status === 1 ? "active" : "disabled";
+}
+
+function toPlatformUserRow(user: IamUser): PlatformUserRow {
+	return {
+		id: user.id,
+		username: user.username,
+		mobile: user.mobile || "-",
+		email: user.email || "-",
+		scopeNames: user.businessDomainIds.length > 0
+			? user.businessDomainIds.map(domainId => `域 #${domainId}`)
+			: ["全局"],
+		roles: user.roleCodes,
+		status: resolveUserStatus(user),
 		lastLoginAt: "-",
-	},
-];
+	};
+}
 
 const columns: TableProps<PlatformUserRow>["columns"] = [
 	{
@@ -64,14 +60,24 @@ const columns: TableProps<PlatformUserRow>["columns"] = [
 		width: 160,
 	},
 	{
-		title: "姓名",
-		dataIndex: "name",
+		title: "手机号",
+		dataIndex: "mobile",
 		width: 140,
 	},
 	{
-		title: "所属组织",
-		dataIndex: "orgName",
+		title: "邮箱",
+		dataIndex: "email",
 		width: 180,
+	},
+	{
+		title: "绑定范围",
+		dataIndex: "scopeNames",
+		width: 180,
+		render: (_, record) => (
+			<Space size={4} wrap>
+				{record.scopeNames.map(scopeName => <Tag key={scopeName}>{scopeName}</Tag>)}
+			</Space>
+		),
 	},
 	{
 		title: "角色",
@@ -107,6 +113,43 @@ const columns: TableProps<PlatformUserRow>["columns"] = [
 ];
 
 export default function PlatformUser() {
+	const [users, setUsers] = useState<PlatformUserRow[]>([]);
+	const [loading, setLoading] = useState(false);
+	const [loadError, setLoadError] = useState<string | null>(null);
+
+	useEffect(() => {
+		let ignore = false;
+
+		setLoading(true);
+		fetchPlatformUsers()
+			.then((iamUsers) => {
+				if (ignore) {
+					return;
+				}
+				setUsers(iamUsers.map(toPlatformUserRow));
+				setLoadError(null);
+			})
+			.catch(() => {
+				if (ignore) {
+					return;
+				}
+				setLoadError("平台用户加载失败，请稍后重试。");
+			})
+			.finally(() => {
+				if (!ignore) {
+					setLoading(false);
+				}
+			});
+
+		return () => {
+			ignore = true;
+		};
+	}, []);
+
+	const activeCount = users.filter(user => user.status === "active").length;
+	const disabledCount = users.filter(user => user.status === "disabled").length;
+	const roleCount = new Set(users.flatMap(user => user.roles)).size;
+
 	return (
 		<BasicContent className="h-full bg-colorBgLayout">
 			<div className="flex h-full flex-col gap-4">
@@ -114,22 +157,25 @@ export default function PlatformUser() {
 					<Col xs={24} md={8}>
 						<Card>
 							<Typography.Text type="secondary">在职用户</Typography.Text>
-							<Typography.Title level={3} className="!mb-0 !mt-2">2</Typography.Title>
+							<Typography.Title level={3} className="!mb-0 !mt-2">{activeCount}</Typography.Title>
 						</Card>
 					</Col>
 					<Col xs={24} md={8}>
 						<Card>
 							<Typography.Text type="secondary">停用账号</Typography.Text>
-							<Typography.Title level={3} className="!mb-0 !mt-2">1</Typography.Title>
+							<Typography.Title level={3} className="!mb-0 !mt-2">{disabledCount}</Typography.Title>
 						</Card>
 					</Col>
 					<Col xs={24} md={8}>
 						<Card>
 							<Typography.Text type="secondary">平台角色</Typography.Text>
-							<Typography.Title level={3} className="!mb-0 !mt-2">3</Typography.Title>
+							<Typography.Title level={3} className="!mb-0 !mt-2">{roleCount}</Typography.Title>
 						</Card>
 					</Col>
 				</Row>
+				{loadError
+					? <Alert type="error" showIcon message={loadError} />
+					: null}
 
 				<Card
 					className="min-h-0 flex-1"
@@ -145,8 +191,9 @@ export default function PlatformUser() {
 						rowKey="id"
 						columns={columns}
 						dataSource={users}
+						loading={loading}
 						pagination={false}
-						scroll={{ x: 960 }}
+						scroll={{ x: 1080 }}
 					/>
 				</Card>
 			</div>

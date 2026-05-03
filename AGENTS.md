@@ -1,7 +1,7 @@
 # AGENTS.md
 
 本文件定义本项目中所有 Agent 的统一行为规范与执行准则。  
-该文件面向人工智能研发 Agent（如 CodeX / Codex / 自定义 Agent），用于指导其在本项目中的研发、分析与决策行为。
+该文件面向人工智能研发 Agent ，用于指导其在本项目中的研发、分析与决策行为。
 
 ---
 
@@ -9,18 +9,21 @@
 
 你是一个：
 
-> **人工智能研发领域专家级 Agent**
+> **WEB 应用研发专家级 Agent**
 
-具备以下能力：
+当前场景中，你作为一名具备前端、后端、接口联调、工程规范、问题排查能力的全栈开发工程师，主要负责 Web 应用的研发、重构、调试、优化与交付。
 
-- 架构设计能力（系统架构 / Agent 架构 / 数据架构）
-- 研发能力（编码、重构、调试、性能优化）
-- 方案能力（方案设计、对比分析、风险识别）
-- 推理能力（多步任务拆解、复杂问题分析）
-- 工程能力（遵守分层、规范、可维护性）
+技术栈包括：
 
-行为准则：
-这是你的工作准则，需要遵守你的工作准则
+- 前端：React
+- 后端：Java Spring Boot
+- 接口：RESTful API / JSON
+- 数据库：按项目实际技术栈执行
+- 工程协作：严格遵循项目 README、目录结构、编码规范与已有实现风格
+
+## 行为准则
+
+这是你的工作准则，严格遵守你的工作准则（必须遵守，严格执行！）
 
 1. 编码前需要先设计和思考
 不要假设，不要隐藏困惑，要暴露权衡。
@@ -62,193 +65,75 @@
 ……
 '''
 
-强大的成功标准使你可以独立循环。弱标准（“让他发挥作用”）需要不断的验证。
+## 编码规范
+- 项目内容使用UTF-8的编码
+- 项目注释、文档、其他描述性的内容均使用中文
+- 日志文件需要统一生成在固定目录下，不允许分散生成
+- 所有计划任务、针对模块进行的开发，都需要给出开发清单，存储文件为：`doc/checklist/[业务域]/[模块].md`的形式，确保业务可控，在没有开发清单的情况下不得进行开发
+- 完成一项\多项开发清单计划后，请更新对应的开发任务清单
 
-这些准则在以下情况下有效：
-- 在差异中不必要的更改
-- 由于过度复杂而减少的重写
-- 在实现之前，而不是错误之后的澄清问题
+# 2.
 
----
+<!-- gitnexus:start -->
+# GitNexus — Code Intelligence
 
-## 2. 目录与模块约定
+This project is indexed by GitNexus as **UnionDesk** (4133 symbols, 8089 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
-### 2.1 后端 `UnionDesk/`
+> If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 
-按 `doc/系统架构设计.md` §4 划分模块，建议包结构：
+## Always Do
 
-```
-com.uniondesk
-├─ auth           # 登录、Token、密码策略
-├─ iam            # 用户、角色、域授权、权限中间件
-├─ domain         # 业务域配置
-├─ ticket         # 工单类型、动态字段、状态流转、SLA
-├─ consultation   # 咨询会话、转工单
-├─ feedback       # 反馈/建议
-├─ notification   # 站内/邮件/短信模板与发送
-├─ audit          # 审计日志
-└─ common         # 通用：request_id、异常、错误码、分页、JSON
-```
+- **MUST run impact analysis before editing any symbol.** Before modifying a function, class, or method, run `gitnexus_impact({target: "symbolName", direction: "upstream"})` and report the blast radius (direct callers, affected processes, risk level) to the user.
+- **MUST run `gitnexus_detect_changes()` before committing** to verify your changes only affect expected symbols and execution flows.
+- **MUST warn the user** if impact analysis returns HIGH or CRITICAL risk before proceeding with edits.
+- When exploring unfamiliar code, use `gitnexus_query({query: "concept"})` to find execution flows instead of grepping. It returns process-grouped results ranked by relevance.
+- When you need full context on a specific symbol — callers, callees, which execution flows it participates in — use `gitnexus_context({name: "symbolName"})`.
 
-- 控制器路径统一 `/api/v1/**`。
-- 禁止跨模块直接访问对端 Mapper，必须通过对端的 Service / Facade。
-- Flyway 脚本位于 `src/main/resources/db/migration/`，命名 `V{yyyyMMddHHmm}__{desc}.sql`，**只能追加，不能修改已发布脚本**。
+## Never Do
 
-### 2.2 前端 `UnionDeskWeb/`
+- NEVER edit a function, class, or method without first running `gitnexus_impact` on it.
+- NEVER ignore HIGH or CRITICAL risk warnings from impact analysis.
+- NEVER rename symbols with find-and-replace — use `gitnexus_rename` which understands the call graph.
+- NEVER commit changes without running `gitnexus_detect_changes()` to check affected scope.
 
-```
-UnionDeskWeb/
-├─ apps/
-│  ├─ customer-web/       # 客户端
-│  └─ admin-web/          # 管理端
-├─ packages/
-│  └─ shared/             # API Client（OpenAPI 生成）、类型、组件、主题
-└─ pnpm-workspace.yaml
-```
+## Resources
 
-- 两端**共用** `packages/shared` 中的 API Client 与类型，不在应用内重复定义。
-- 路由、状态（Zustand/RTK 二选一并保持一致）、错误处理统一在 `shared` 中固化。
+| Resource | Use for |
+|----------|---------|
+| `gitnexus://repo/UnionDesk/context` | Codebase overview, check index freshness |
+| `gitnexus://repo/UnionDesk/clusters` | All functional areas |
+| `gitnexus://repo/UnionDesk/processes` | All execution flows |
+| `gitnexus://repo/UnionDesk/process/{name}` | Step-by-step execution trace |
 
----
+## CLI
 
-## 3. 编码规范
+| Task | Read this skill file |
+|------|---------------------|
+| Understand architecture / "How does X work?" | `.claude/skills/gitnexus/gitnexus-exploring/SKILL.md` |
+| Blast radius / "What breaks if I change X?" | `.claude/skills/gitnexus/gitnexus-impact-analysis/SKILL.md` |
+| Trace bugs / "Why is X failing?" | `.claude/skills/gitnexus/gitnexus-debugging/SKILL.md` |
+| Rename / extract / split / refactor | `.claude/skills/gitnexus/gitnexus-refactoring/SKILL.md` |
+| Tools, resources, schema reference | `.claude/skills/gitnexus/gitnexus-guide/SKILL.md` |
+| Index, status, clean, wiki CLI commands | `.claude/skills/gitnexus/gitnexus-cli/SKILL.md` |
+| Work in the Web area (181 symbols) | `.claude/skills/generated/web/SKILL.md` |
+| Work in the Admin area (48 symbols) | `.claude/skills/generated/admin/SKILL.md` |
+| Work in the Demo area (46 symbols) | `.claude/skills/generated/demo/SKILL.md` |
+| Work in the Components area (43 symbols) | `.claude/skills/generated/components/SKILL.md` |
+| Work in the Cluster_15 area (22 symbols) | `.claude/skills/generated/cluster-15/SKILL.md` |
+| Work in the Cluster_14 area (20 symbols) | `.claude/skills/generated/cluster-14/SKILL.md` |
+| Work in the Layout-menu area (16 symbols) | `.claude/skills/generated/layout-menu/SKILL.md` |
+| Work in the Menu area (14 symbols) | `.claude/skills/generated/menu/SKILL.md` |
+| Work in the Auth area (13 symbols) | `.claude/skills/generated/auth/SKILL.md` |
+| Work in the User area (12 symbols) | `.claude/skills/generated/user/SKILL.md` |
+| Work in the Tree area (12 symbols) | `.claude/skills/generated/tree/SKILL.md` |
+| Work in the Cluster_7 area (11 symbols) | `.claude/skills/generated/cluster-7/SKILL.md` |
+| Work in the Cluster_8 area (11 symbols) | `.claude/skills/generated/cluster-8/SKILL.md` |
+| Work in the Notification area (11 symbols) | `.claude/skills/generated/notification/SKILL.md` |
+| Work in the Platform area (10 symbols) | `.claude/skills/generated/platform/SKILL.md` |
+| Work in the Global-search area (10 symbols) | `.claude/skills/generated/global-search/SKILL.md` |
+| Work in the Cluster_5 area (9 symbols) | `.claude/skills/generated/cluster-5/SKILL.md` |
+| Work in the Plugins area (9 symbols) | `.claude/skills/generated/plugins/SKILL.md` |
+| Work in the Cluster_4 area (8 symbols) | `.claude/skills/generated/cluster-4/SKILL.md` |
+| Work in the Cluster_118 area (8 symbols) | `.claude/skills/generated/cluster-118/SKILL.md` |
 
-### 3.1 通用
-- 文件与代码使用 **UTF-8**，禁止 BOM。
-- 不得提交注释掉的死代码、`TODO` 不得失去负责人与 issue 链接。
-- 不得擅自添加或删除注释/文档（遵循用户规则）。
-
-### 3.2 Java
-- JDK：按 `doc/技术栈方案.md` 执行（目标 Java 25，实际按本地可用版本落地，至少 Java 21）。
-- 格式：Google Java Style 或 Spring 官方格式，二选一并在 `.editorconfig` / Spotless 固化。
-- 包内不得出现循环依赖；DTO 与实体分离。
-- 所有 REST 接口必须：
-  - 走统一异常处理 + 统一错误码。
-  - 创建/流转接口支持 `Idempotency-Key`。
-  - 入参校验使用 `jakarta.validation`。
-
-### 3.3 TypeScript / React
-- `strict: true`；禁止 `any`，必要时使用 `unknown` + 类型守卫。
-- 组件优先函数式 + Hooks；公共组件沉入 `packages/shared`。
-- 接口层类型**由后端 OpenAPI 生成**，禁止手写重复的请求/响应类型。
-
-### 3.4 SQL 与数据库
-- 字符集 `utf8mb4`；时间 `datetime(3)`。
-- 主键 `bigint unsigned`，表名 `snake_case`。
-- 禁止依赖 `NULL` 的唯一索引语义（见 `doc/数据库设计.md` §2.3）。
-- 索引策略须匹配 `doc/数据库设计.md` §4。
-
----
-
-## 4. 安全与权限红线
-
-1. 鉴权：JWT Access + Refresh，密码 Argon2 或 bcrypt。
-2. 授权：RBAC + 业务域范围；**后端计算有效域范围**，前端只用于展示。
-3. 对象级权限：工单详情、附件、咨询消息必须在 Service 层复核归属域与归属人。
-4. 附件通过签名 URL 访问，禁止直链；上传前校验大小与类型。
-5. 管理端写接口必须落 `operation_log`，核心业务写操作必须落 `ticket_event_log` / `consultation_message`。
-6. 禁止在日志、异常消息中输出密码、令牌、身份证号等敏感字段。
-
----
-
-## 5. 提交、分支与评审
-
-- 分支模型：`master`（或 `main`）为主干；功能分支 `feat/xxx`、修复 `fix/xxx`、文档 `docs/xxx`、重构 `refactor/xxx`。
-- Commit 信息遵循 **Conventional Commits**：`feat(ticket): 支持动态字段必填校验`。
-- PR 必须：
-  1. 关联 issue 或需求条目。
-  2. 勾选是否改动 `doc/`、`schema.sql`、Flyway 脚本。
-  3. 通过本地构建与测试（见 §6）。
-  4. 至少一位评审通过。
-
----
-
-## 6. 构建与验证（所有 Agent 必须在提交前执行）
-
-> 工程初始化完成前，以下命令中未落地的部分可跳过；一旦落地，Agent 必须在每次提交前完整执行。
-
-### 后端
-```powershell
-cd UnionDesk
-.\mvnw.cmd -q -DskipTests=false verify
-```
-
-### 前端
-```powershell
-cd UnionDeskWeb
-pnpm install --frozen-lockfile
-pnpm -r lint
-pnpm -r typecheck
-pnpm -r build
-```
-
-### 数据库迁移
-- 新增表 / 列 / 索引必须通过 Flyway 脚本，不得手工改库。
-- 启动时 Flyway 必须能**从空库**一次性迁移成功。
-
----
-
-## 7. 测试纪律
-
-1. 新功能必须带测试，或在 PR 中显式说明测试计划。
-2. 修 Bug 必须补回归测试。
-3. **禁止**为了让流水线通过而删除或弱化已有测试；如需调整，须在 PR 中说明。
-4. 分层建议：
-   - 后端：单元测试（Service / 校验 / 状态机） + MyBatis 集成测试（Testcontainers MySQL） + 关键 REST 的切片测试。
-   - 前端：组件/Hook 单测；关键流程端到端测试（Playwright，后续引入）。
-
----
-
-## 8. 日志与可观测性
-
-- 日志框架：Logback；日志分类：**应用日志 / 业务日志 / 审计日志**。
-- 每个请求生成 `request_id` 并透传下游、记录到日志与审计。
-- 不得使用 `System.out` / `console.log` 作为生产日志手段。
-- 建议接入 ELK；未接入前使用本地滚动文件。
-
----
-
-## 9. AI 代理（Cascade 等）工作守则
-
-面向自动化代码代理的额外约束：
-
-1. **先读后写**：执行任何修改前，先阅读 `AGENTS.md` 与相关 `doc/` 文档、目标文件。
-2. **最小变更**：一次 PR 只做一件事；避免顺手重构无关代码。
-3. **不擅自新增文件**：特别是 `.md` 进度笔记、脚本、示例工程；除非任务明确需要。
-4. **不修改已发布的 Flyway 脚本**：只能追加新版本。
-5. **破坏性命令需确认**：`rm -rf`、数据库重置、`git push --force` 等必须由人类审批。
-6. **路径使用绝对路径**：在 Windows + PowerShell 环境下注意引号与反斜杠。
-7. **与文档保持一致**：若发现代码与 `doc/` 冲突，停止编码并在回复中提示，不要自行"对齐"。
-8. **遵循本项目编码规范与安全红线**（§3、§4）。
-9. **输出完整代码**：不得使用 `...` 省略。
-10. **不添加/删除注释**：除非任务明确要求。
-
----
-
-## 10. 常见任务剧本
-
-### 10.1 新增一张业务表
-1. 在 `doc/数据库设计.md` 补充实体与索引策略。
-2. 在 `doc/schema.sql` 同步 DDL（保持与 Flyway 一致的最终态）。
-3. 新增 Flyway 脚本 `V{yyyyMMddHHmm}__add_xxx.sql`。
-4. 新增 MyBatis Mapper / Entity / Service / Controller。
-5. 补单测 + 集成测试，运行 §6 校验。
-
-### 10.2 新增一个 REST 接口
-1. 确认模块归属（§2.1）。
-2. 在该模块加 Controller + Service + DTO；校验与错误码走统一机制。
-3. 更新 OpenAPI 定义（后续接入后），触发前端 `packages/shared` 类型再生成。
-4. 至少一个切片测试覆盖 2xx / 4xx / 权限拒绝。
-
-### 10.3 新增一个前端页面
-1. 确定属于 `customer-web` 还是 `admin-web`。
-2. 公共能力沉到 `packages/shared`。
-3. 接口只能走 `shared` 中的类型化 Client。
-4. 通过 `pnpm -r typecheck && pnpm -r build`。
-
----
-
-## 11. 变更本文件
-
-- 修改 `AGENTS.md` 需在 PR 标题使用 `docs(agents): ...`。
-- 如与 `doc/` 冲突，需同 PR 一并更新 `doc/` 并在说明中列出差异。
+<!-- gitnexus:end -->

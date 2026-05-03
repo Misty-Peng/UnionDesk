@@ -1,6 +1,7 @@
 package com.uniondesk.common.web;
 
 import com.uniondesk.auth.core.AuthenticationFailedException;
+import com.uniondesk.auth.core.AuthCaptchaException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
@@ -15,6 +16,12 @@ public class ApiExceptionHandler {
     public ResponseEntity<ApiResponse<Void>> handleAuthenticationFailed(AuthenticationFailedException ex) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                 .body(ApiResponse.error(HttpStatus.UNAUTHORIZED.name(), ex.getMessage()));
+    }
+
+    @ExceptionHandler(AuthCaptchaException.class)
+    public ResponseEntity<ApiResponse<Void>> handleAuthCaptcha(AuthCaptchaException ex) {
+        return ResponseEntity.badRequest()
+                .body(ApiResponse.error("CAPTCHA_FAILED", ex.getMessage()));
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

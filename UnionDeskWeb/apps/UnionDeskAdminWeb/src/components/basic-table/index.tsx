@@ -171,6 +171,11 @@ export function BasicTable<
 					fullScreen: true,
 					...props.options,
 				}}
+				search={{
+					labelWidth: "auto",
+					span: { xs: 24, sm: 12, md: 8, lg: 8, xl: 6, xxl: 6 },
+					...props.search,
+				}}
 				rootClassName={cn(BASIC_TABLE_ROOT_CLASS_NAME, props.rootClassName)}
 				className={cn(classes.basicTable, props.className)}
 				scroll={{ y: scrollY, x: "max-content", ...props.scroll }}

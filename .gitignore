@@ -1,0 +1,22 @@
+.gitnexus
+
+# Agent and local tooling artifacts
+.claude/
+CLAUDE.md
+agent-work/
+.runtime/
+.idea/
+docs/superpowers/
+
+# Local runtime output
+logs/
+tmp/
+*.log
+
+# Frontend local-only files
+node_modules/
+dist/
+.umi/
+UnionDeskWeb/apps/UnionDeskAdminWeb/.env
+UnionDeskWeb/apps/UnionDeskAdminWeb/.env.*
+UnionDeskWeb/apps/UnionDeskAdminWeb/.gitconfig

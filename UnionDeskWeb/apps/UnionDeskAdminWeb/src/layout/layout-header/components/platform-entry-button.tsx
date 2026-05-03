@@ -1,7 +1,7 @@
 import type { ButtonProps } from "antd";
 
 import { BasicButton } from "#src/components/basic-button";
-import { AccessControlRoles, useAccess } from "#src/hooks/use-access";
+import { useUserStore } from "#src/store/user";
 import { cn } from "#src/utils/cn";
 
 import { AppstoreOutlined, RollbackOutlined } from "@ant-design/icons";
@@ -14,9 +14,9 @@ const businessHomePath = import.meta.env.VITE_BASE_HOME_PATH || "/system/menu";
 export function PlatformEntryButton({ className, ...restProps }: ButtonProps) {
 	const navigate = useNavigate();
 	const { pathname } = useLocation();
-	const { hasAccessByRoles } = useAccess();
+	const platformAccess = useUserStore(state => state.platformAccess);
 
-	const canUsePlatformEntry = hasAccessByRoles(AccessControlRoles.admin);
+	const canUsePlatformEntry = platformAccess;
 	if (!canUsePlatformEntry) {
 		return null;
 	}

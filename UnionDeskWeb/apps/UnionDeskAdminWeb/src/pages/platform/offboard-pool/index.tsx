@@ -1,43 +1,50 @@
 import type { TableProps } from "antd";
+import type { IamUser } from "@uniondesk/shared";
 
+import { fetchPlatformOffboardPoolUsers } from "#src/api/platform/iam";
 import { BasicContent } from "#src/components/basic-content";
 
 import { DownloadOutlined, RollbackOutlined } from "@ant-design/icons";
-import { Button, Card, Col, Row, Space, Table, Tag, Typography } from "antd";
+import { Alert, Button, Card, Col, Row, Space, Table, Tag, Typography } from "antd";
+import { useEffect, useState } from "react";
 
 interface OffboardRow {
 	id: number;
 	username: string;
-	name: string;
-	orgName: string;
+	mobile: string;
+	scopeNames: string[];
 	roles: string[];
 	offboardAt: string;
 	reason: string;
 	operator: string;
 }
 
-const offboardRows: OffboardRow[] = [
-	{
-		id: 1,
-		username: "former-ops",
-		name: "离职运营",
-		orgName: "平台运营部",
-		roles: ["platform_operator"],
-		offboardAt: "2026-04-20 16:30",
-		reason: "人员离职",
-		operator: "平台管理员",
-	},
-	{
-		id: 2,
-		username: "former-audit",
-		name: "历史审计",
-		orgName: "安全审计组",
-		roles: ["security_auditor"],
-		offboardAt: "2026-04-12 11:05",
-		reason: "组织调整",
-		operator: "平台管理员",
-	},
-];
+function toOffboardRow(user: IamUser): OffboardRow {
+	return {
+		id: user.id,
+		username: user.username,
+		mobile: user.mobile || "-",
+		scopeNames: user.businessDomainIds.length > 0
+			? user.businessDomainIds.map(domainId => `域 #${domainId}`)
+			: ["全局"],
+		roles: user.roleCodes,
+		offboardAt: user.offboardedAt || "-",
+		reason: user.offboardReason || "-",
+		operator: user.offboardedBy ? `用户 #${user.offboardedBy}` : "-",
+	};
+}
+
+function isCurrentMonth(value: string): boolean {
+	if (!value || value === "-") {
+		return false;
+	}
+	const date = new Date(value.replace(" ", "T"));
+	if (Number.isNaN(date.getTime())) {
+		return false;
+	}
+	const now = new Date();
+	return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
+}
 
 const columns: TableProps<OffboardRow>["columns"] = [
 	{
@@ -46,14 +53,19 @@ const columns: TableProps<OffboardRow>["columns"] = [
 		width: 160,
 	},
 	{
-		title: "姓名",
-		dataIndex: "name",
+		title: "手机号",
+		dataIndex: "mobile",
 		width: 140,
 	},
 	{
-		title: "原组织",
-		dataIndex: "orgName",
+		title: "绑定范围",
+		dataIndex: "scopeNames",
 		width: 180,
+		render: (_, record) => (
+			<Space size={4} wrap>
+				{record.scopeNames.map(scopeName => <Tag key={scopeName}>{scopeName}</Tag>)}
+			</Space>
+		),
 	},
 	{
 		title: "原角色",
@@ -93,6 +105,42 @@ const columns: TableProps<OffboardRow>["columns"] = [
 ];
 
 export default function PlatformOffboardPool() {
+	const [offboardRows, setOffboardRows] = useState<OffboardRow[]>([]);
+	const [loading, setLoading] = useState(false);
+	const [loadError, setLoadError] = useState<string | null>(null);
+
+	useEffect(() => {
+		let ignore = false;
+
+		setLoading(true);
+		fetchPlatformOffboardPoolUsers()
+			.then((users) => {
+				if (ignore) {
+					return;
+				}
+				setOffboardRows(users.map(toOffboardRow));
+				setLoadError(null);
+			})
+			.catch(() => {
+				if (ignore) {
+					return;
+				}
+				setLoadError("离职池加载失败，请稍后重试。");
+			})
+			.finally(() => {
+				if (!ignore) {
+					setLoading(false);
+				}
+			});
+
+		return () => {
+			ignore = true;
+		};
+	}, []);
+
+	const offboardCount = offboardRows.length;
+	const currentMonthCount = offboardRows.filter(row => isCurrentMonth(row.offboardAt)).length;
+
 	return (
 		<BasicContent className="h-full bg-colorBgLayout">
 			<div className="flex h-full flex-col gap-4">
@@ -100,22 +148,25 @@ export default function PlatformOffboardPool() {
 					<Col xs={24} md={8}>
 						<Card>
 							<Typography.Text type="secondary">离职人员</Typography.Text>
-							<Typography.Title level={3} className="!mb-0 !mt-2">2</Typography.Title>
+							<Typography.Title level={3} className="!mb-0 !mt-2">{offboardCount}</Typography.Title>
 						</Card>
 					</Col>
 					<Col xs={24} md={8}>
 						<Card>
 							<Typography.Text type="secondary">可恢复账号</Typography.Text>
-							<Typography.Title level={3} className="!mb-0 !mt-2">2</Typography.Title>
+							<Typography.Title level={3} className="!mb-0 !mt-2">{offboardCount}</Typography.Title>
 						</Card>
 					</Col>
 					<Col xs={24} md={8}>
 						<Card>
 							<Typography.Text type="secondary">本月离职</Typography.Text>
-							<Typography.Title level={3} className="!mb-0 !mt-2">2</Typography.Title>
+							<Typography.Title level={3} className="!mb-0 !mt-2">{currentMonthCount}</Typography.Title>
 						</Card>
 					</Col>
 				</Row>
+				{loadError
+					? <Alert type="error" showIcon message={loadError} />
+					: null}
 
 				<Card
 					className="min-h-0 flex-1"
@@ -131,6 +182,7 @@ export default function PlatformOffboardPool() {
 						rowKey="id"
 						columns={columns}
 						dataSource={offboardRows}
+						loading={loading}
 						pagination={false}
 						scroll={{ x: 1080 }}
 					/>

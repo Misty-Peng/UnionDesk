@@ -32,7 +32,10 @@ class JwtTokenServiceTests {
     @Test
     void rejectTamperedAccessToken() {
         String token = jwtTokenService.issueAccessToken(new UserContext(42L, "agent", 7L, "sid-42", "ud-admin-web"));
-        String tampered = token.substring(0, token.length() - 1) + (token.endsWith("A") ? "B" : "A");
+        String[] parts = token.split("\\.");
+        String signature = parts[2];
+        String tamperedSignature = (signature.startsWith("A") ? "B" : "A") + signature.substring(1);
+        String tampered = parts[0] + "." + parts[1] + "." + tamperedSignature;
 
         assertThatThrownBy(() -> jwtTokenService.parseAccessToken(tampered))
                 .isInstanceOf(IllegalArgumentException.class)

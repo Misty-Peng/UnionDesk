@@ -97,6 +97,7 @@ public final class IamDtos {
 
     public record ActionView(
             String code,
+            String name,
             String httpMethod,
             String pathPattern) {
     }
@@ -104,42 +105,52 @@ public final class IamDtos {
     public record MenuTreeNodeView(
             long id,
             String code,
+            String nodeType,
             String name,
-            String path,
-            String clientScope,
+            String routePath,
+            String componentKey,
+            String permissionCode,
             Long parentId,
             Integer orderNo,
             String icon,
-            String component,
             boolean hidden,
             int status,
+            boolean required,
             List<MenuTreeNodeView> children) {
     }
 
     public record CreateMenuRequest(
-            @NotBlank String resourceCode,
-            @NotBlank String resourceName,
-            @NotBlank String path,
-            @NotBlank String clientScope,
+            @NotBlank String nodeType,
+            @NotBlank String name,
+            String routePath,
+            String componentKey,
+            String permissionCode,
             Long parentId,
             Integer orderNo,
             String icon,
-            String component,
             Boolean hidden,
             Integer status) {
     }
 
     public record UpdateMenuRequest(
-            String resourceCode,
-            String resourceName,
-            String path,
-            String clientScope,
+            String nodeType,
+            String name,
+            String routePath,
+            String componentKey,
+            String permissionCode,
             Long parentId,
             Integer orderNo,
             String icon,
-            String component,
             Boolean hidden,
             Integer status) {
+    }
+
+    public record AdminPermissionCodeView(
+            String code,
+            String name,
+            String permissionScope,
+            String httpMethod,
+            String pathPattern) {
     }
 
     public record RoleView(
@@ -164,13 +175,13 @@ public final class IamDtos {
 
     public record RolePermissionsView(
             int roleId,
-            List<Long> menuResourceIds,
-            List<Long> actionResourceIds) {
+            List<Long> menuIds,
+            List<Long> buttonIds) {
     }
 
     public record ReplaceRolePermissionsRequest(
-            @NotNull List<Long> menuResourceIds,
-            @NotNull List<Long> actionResourceIds) {
+            @NotNull List<Long> menuIds,
+            @NotNull List<Long> buttonIds) {
     }
 
     public record UserAccountView(

@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => {
 	return {
 		goLogin: vi.fn(),
 		navigate: vi.fn(),
+		navigateElement: vi.fn(),
 		getUserInfo,
 		setAccessStore: vi.fn(),
 		hideLoading: vi.fn(),
@@ -31,6 +32,10 @@ const mocks = vi.hoisted(() => {
 		preferencesState: {
 			enableBackendAccess: false,
 			enableFrontendAceess: false,
+		},
+		locationState: {
+			pathname: "/",
+			search: "",
 		},
 	};
 });
@@ -97,12 +102,12 @@ vi.mock("#src/store/user", () => ({
 }));
 
 vi.mock("react-router", () => ({
-	Navigate: () => null,
+	Navigate: (props: { to: string }) => {
+		mocks.navigateElement(props);
+		return null;
+	},
 	matchRoutes: () => [],
-	useLocation: () => ({
-		pathname: "/",
-		search: "",
-	}),
+	useLocation: () => mocks.locationState,
 	useNavigate: () => mocks.navigate,
 	useSearchParams: () => [new URLSearchParams(), vi.fn()],
 }));
@@ -110,6 +115,21 @@ vi.mock("react-router", () => ({
 import { AuthGuard } from "./auth-guard";
 
 describe("AuthGuard", () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+		mocks.getUserInfo.mockRejectedValue({
+			response: {
+				status: 401,
+			},
+		});
+		mocks.authState.token = "stale-token";
+		mocks.userState.id = 0;
+		mocks.userState.roles = [];
+		mocks.accessState.isAccessChecked = false;
+		mocks.locationState.pathname = "/";
+		mocks.locationState.search = "";
+	});
+
 	it("redirects to login when the current token is unauthorized", async () => {
 		render(
 			<AuthGuard>
@@ -122,5 +142,23 @@ describe("AuthGuard", () => {
 		});
 
 		expect(mocks.navigate).not.toHaveBeenCalled();
+	});
+
+	it.each([
+		"/system/menu",
+		"/platform/menu",
+	])("waits for access restoration on %s refresh instead of replacing the current route with login", (pathname) => {
+		mocks.getUserInfo.mockReturnValue(new Promise(() => undefined));
+		mocks.locationState.pathname = pathname;
+
+		render(
+			<AuthGuard>
+				<div>content</div>
+			</AuthGuard>,
+		);
+
+		expect(mocks.navigateElement).not.toHaveBeenCalledWith(expect.objectContaining({
+			to: "/login",
+		}));
 	});
 });

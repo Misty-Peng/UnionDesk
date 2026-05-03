@@ -1,6 +1,7 @@
 package com.uniondesk.iam.core;
 
 import com.uniondesk.auth.core.UserContext;
+import com.uniondesk.iam.admin.AdminMenuService;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -16,6 +17,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
+import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -33,25 +35,91 @@ public class IamService {
     private final JdbcTemplate jdbcTemplate;
     private final Clock clock;
     private final PasswordEncoder passwordEncoder;
+    private final AdminMenuService adminMenuService;
+    private final PermissionScopePolicy permissionScopePolicy;
     private final AntPathMatcher pathMatcher = new AntPathMatcher();
     private final Map<String, CacheEntry<List<ApiGrant>>> apiGrantCache = new ConcurrentHashMap<>();
     private final Map<String, CacheEntry<List<IamResource>>> menuResourceCache = new ConcurrentHashMap<>();
 
-    public IamService(JdbcTemplate jdbcTemplate, Clock clock, PasswordEncoder passwordEncoder) {
+    public IamService(
+            JdbcTemplate jdbcTemplate,
+            Clock clock,
+            PasswordEncoder passwordEncoder,
+            AdminMenuService adminMenuService,
+            PermissionScopePolicy permissionScopePolicy) {
         this.jdbcTemplate = jdbcTemplate;
         this.clock = clock;
         this.passwordEncoder = passwordEncoder;
+        this.adminMenuService = adminMenuService;
+        this.permissionScopePolicy = permissionScopePolicy;
     }
 
     public boolean isApiAllowed(UserContext context, String method, String requestPath) {
         if (context == null || !StringUtils.hasText(method) || !StringUtils.hasText(requestPath)) {
             return false;
         }
+        List<String> matchedPermissionCodes = findPermissionCodesByRequest(method, requestPath);
+        if (!matchedPermissionCodes.isEmpty()) {
+            return hasAnyPermission(context, matchedPermissionCodes);
+        }
+        if ("super_admin".equalsIgnoreCase(context.role()) && requestPath.startsWith("/api/v1/iam/")) {
+            return true;
+        }
+        if (adminMenuService.handlesApiRequest(method, requestPath)) {
+            return adminMenuService.isApiAllowed(context.role(), method, requestPath);
+        }
         List<ApiGrant> grants = loadActionGrants(context.role(), context.clientCode());
         String normalizedMethod = method.trim().toUpperCase();
         return grants.stream()
                 .filter(grant -> normalizedMethod.equals(grant.httpMethod()))
                 .anyMatch(grant -> pathMatcher.match(grant.pathPattern(), requestPath));
+    }
+
+    public boolean hasAnyPermission(UserContext context, List<String> permissionCodes) {
+        return hasAnyPermission(context, permissionCodes, null);
+    }
+
+    public boolean hasPermissionForDomains(UserContext context, String permissionCode, List<Long> businessDomainIds) {
+        if (businessDomainIds == null || businessDomainIds.isEmpty()) {
+            return hasAnyPermission(context, List.of(permissionCode));
+        }
+        return businessDomainIds.stream()
+                .filter(Objects::nonNull)
+                .distinct()
+                .allMatch(domainId -> hasAnyPermission(context, List.of(permissionCode), domainId));
+    }
+
+    public boolean containsGlobalRole(List<String> roleCodes) {
+        if (roleCodes == null || roleCodes.isEmpty()) {
+            return false;
+        }
+        return loadRoleDefinitions(roleCodes).values().stream()
+                .anyMatch(role -> "global".equals(role.scope()));
+    }
+
+    private boolean hasAnyPermission(UserContext context, List<String> permissionCodes, Long targetBusinessDomainId) {
+        if (context == null || permissionCodes == null || permissionCodes.isEmpty()) {
+            return false;
+        }
+        List<String> normalizedCodes = permissionCodes.stream()
+                .filter(StringUtils::hasText)
+                .map(String::trim)
+                .distinct()
+                .toList();
+        if (normalizedCodes.isEmpty()) {
+            return false;
+        }
+        try {
+            List<EffectivePermissionGrant> grants = loadEffectivePermissionGrants(context.userId(), normalizedCodes);
+            return grants.stream().anyMatch(grant -> permissionScopePolicy.isPermissionEffective(
+                    grant.roleLevel(),
+                    grant.bindingScope(),
+                    grant.businessDomainId(),
+                    grant.permissionScope(),
+                    targetBusinessDomainId));
+        } catch (DataAccessException ex) {
+            return false;
+        }
     }
 
     public List<IamResource> listCurrentMenuResources(UserContext context) {
@@ -126,27 +194,47 @@ public class IamService {
         if (userId <= 0 || !StringUtils.hasText(clientCode)) {
             return List.of();
         }
-        List<String> roleCodes = jdbcTemplate.query("""
-                        SELECT DISTINCT r.code AS role_code
-                        FROM role r
-                        JOIN (
-                            SELECT role_id
-                            FROM user_global_role
-                            WHERE user_id = ?
-                            UNION
-                            SELECT role_id
-                            FROM user_domain_role
-                            WHERE user_id = ?
-                        ) ur ON ur.role_id = r.id
-                        JOIN iam_role_resource irr ON irr.role_id = r.id
-                        JOIN iam_resource ir ON ir.id = irr.resource_id
-                        WHERE ir.status = 1
-                          AND (ir.client_scope = ? OR ir.client_scope = 'all')
-                        """,
-                (rs, rowNum) -> rs.getString("role_code"),
-                userId,
-                userId,
-                clientCode.trim().toLowerCase());
+        List<String> roleCodes;
+        if ("ud-admin-web".equalsIgnoreCase(clientCode)) {
+            roleCodes = jdbcTemplate.query("""
+                            SELECT DISTINCT r.code AS role_code
+                            FROM role r
+                            JOIN (
+                                SELECT role_id
+                                FROM user_global_role
+                                WHERE user_id = ?
+                                UNION
+                                SELECT role_id
+                                FROM user_domain_role
+                                WHERE user_id = ?
+                            ) ur ON ur.role_id = r.id
+                            """,
+                    (rs, rowNum) -> rs.getString("role_code"),
+                    userId,
+                    userId);
+        } else {
+            roleCodes = jdbcTemplate.query("""
+                            SELECT DISTINCT r.code AS role_code
+                            FROM role r
+                            JOIN (
+                                SELECT role_id
+                                FROM user_global_role
+                                WHERE user_id = ?
+                                UNION
+                                SELECT role_id
+                                FROM user_domain_role
+                                WHERE user_id = ?
+                            ) ur ON ur.role_id = r.id
+                            JOIN iam_role_resource irr ON irr.role_id = r.id
+                            JOIN iam_resource ir ON ir.id = irr.resource_id
+                            WHERE ir.status = 1
+                              AND (ir.client_scope = ? OR ir.client_scope = 'all')
+                            """,
+                    (rs, rowNum) -> rs.getString("role_code"),
+                    userId,
+                    userId,
+                    clientCode.trim().toLowerCase());
+        }
         roleCodes.sort(Comparator.comparingInt(IamService::rolePriority));
         return List.copyOf(roleCodes);
     }
@@ -158,8 +246,46 @@ public class IamService {
         UserSummary user = loadCurrentUserSummary(context.userId());
         List<String> roles = listUserRoleCodesByClient(context.userId(), context.clientCode());
         List<DomainSummary> domains = loadDomainSummaries(context.userId(), roles);
-        List<IamResource> menus = loadResourcesForRoles(roles, context.clientCode(), List.of("menu"));
-        List<IamResource> actions = loadResourcesForRoles(roles, context.clientCode(), List.of("action", "api"));
+        List<IamResource> menus;
+        List<IamResource> actions;
+        if ("ud-admin-web".equalsIgnoreCase(context.clientCode())) {
+            AdminMenuService.PermissionSnapshotData snapshotData = adminMenuService.loadPermissionSnapshot(roles);
+            menus = snapshotData.menus().stream()
+                    .map(menu -> new IamResource(
+                            menu.id(),
+                            "menu",
+                            menu.code(),
+                            menu.name(),
+                            context.clientCode(),
+                            null,
+                            menu.routePath(),
+                            menu.parentId(),
+                            menu.orderNo(),
+                            menu.icon(),
+                            menu.componentKey(),
+                            menu.hidden(),
+                            menu.status()))
+                    .toList();
+            actions = snapshotData.actions().stream()
+                    .map(action -> new IamResource(
+                            action.id(),
+                            "action",
+                            action.permissionCode(),
+                            action.name(),
+                            context.clientCode(),
+                            action.httpMethod(),
+                            action.pathPattern(),
+                            action.parentId(),
+                            action.orderNo(),
+                            null,
+                            null,
+                            false,
+                            1))
+                    .toList();
+        } else {
+            menus = loadResourcesForRoles(roles, context.clientCode(), List.of("menu"));
+            actions = loadResourcesForRoles(roles, context.clientCode(), List.of("action", "api"));
+        }
         return new PermissionSnapshot(
                 user,
                 context.clientCode(),
@@ -526,6 +652,8 @@ public class IamService {
         if ((userGlobalCount != null && userGlobalCount > 0) || (userDomainCount != null && userDomainCount > 0)) {
             throw new IllegalArgumentException("role is bound to users, unbind first");
         }
+        jdbcTemplate.update("DELETE FROM iam_role_permission WHERE role_id = ?", roleId);
+        jdbcTemplate.update("DELETE FROM iam_role_binding WHERE role_id = ?", roleId);
         jdbcTemplate.update("DELETE FROM iam_role_resource WHERE role_id = ?", roleId);
         jdbcTemplate.update("DELETE FROM role WHERE id = ?", roleId);
         evictAuthorizationCache();
@@ -923,16 +1051,16 @@ public class IamService {
 
     private List<String> listUserRoleCodes(long userId) {
         List<String> roleCodes = jdbcTemplate.query("""
-                        SELECT DISTINCT r.code
+                        SELECT DISTINCT r.id AS role_order, r.code AS role_code
                         FROM role r
                         JOIN (
                             SELECT role_id FROM user_global_role WHERE user_id = ?
                             UNION
                             SELECT role_id FROM user_domain_role WHERE user_id = ?
                         ) rs ON rs.role_id = r.id
-                        ORDER BY r.id
+                        ORDER BY role_order
                         """,
-                (rs, rowNum) -> rs.getString("code"),
+                (rs, rowNum) -> rs.getString("role_code"),
                 userId,
                 userId);
         roleCodes.sort(Comparator.comparingInt(IamService::rolePriority));
@@ -1001,14 +1129,28 @@ public class IamService {
         ensureDomainsExist(domainIds);
         jdbcTemplate.update("DELETE FROM user_global_role WHERE user_id = ?", userId);
         jdbcTemplate.update("DELETE FROM user_domain_role WHERE user_id = ?", userId);
+        jdbcTemplate.update("DELETE FROM iam_role_binding WHERE user_id = ?", userId);
         for (RoleDefinition role : roleMap.values()) {
             if ("global".equals(role.scope())) {
                 jdbcTemplate.update("INSERT INTO user_global_role (user_id, role_id) VALUES (?, ?)", userId, role.id());
+                jdbcTemplate.update("""
+                                INSERT INTO iam_role_binding (user_id, role_id, binding_scope, business_domain_id, status)
+                                VALUES (?, ?, 'global', NULL, 1)
+                                """,
+                        userId,
+                        role.id());
                 continue;
             }
             for (Long domainId : domainIds) {
                 jdbcTemplate.update(
                         "INSERT INTO user_domain_role (user_id, role_id, business_domain_id) VALUES (?, ?, ?)",
+                        userId,
+                        role.id(),
+                        domainId);
+                jdbcTemplate.update("""
+                                INSERT INTO iam_role_binding (user_id, role_id, binding_scope, business_domain_id, status)
+                                VALUES (?, ?, 'domain', ?, 1)
+                                """,
                         userId,
                         role.id(),
                         domainId);
@@ -1083,6 +1225,58 @@ public class IamService {
         if (count == null || count != resourceIds.size()) {
             throw new IllegalArgumentException(resourceType + " resource not found");
         }
+    }
+
+    private List<String> findPermissionCodesByRequest(String method, String requestPath) {
+        String normalizedMethod = method.trim().toUpperCase();
+        try {
+            return jdbcTemplate.query("""
+                            SELECT code, path_pattern
+                            FROM iam_permission
+                            WHERE status = 1
+                              AND http_method = ?
+                              AND path_pattern IS NOT NULL
+                            """,
+                    (rs, rowNum) -> new RoutePermission(
+                            rs.getString("code"),
+                            rs.getString("path_pattern")),
+                    normalizedMethod).stream()
+                    .filter(permission -> pathMatcher.match(permission.pathPattern(), requestPath))
+                    .map(RoutePermission::code)
+                    .toList();
+        } catch (DataAccessException ex) {
+            return List.of();
+        }
+    }
+
+    private List<EffectivePermissionGrant> loadEffectivePermissionGrants(long userId, List<String> permissionCodes) {
+        String placeholders = String.join(",", permissionCodes.stream().map(code -> "?").toList());
+        List<Object> args = new ArrayList<>();
+        args.add(userId);
+        args.addAll(permissionCodes);
+        return jdbcTemplate.query("""
+                        SELECT
+                            r.scope AS role_level,
+                            b.binding_scope,
+                            b.business_domain_id,
+                            p.permission_scope
+                        FROM iam_role_binding b
+                        JOIN role r ON r.id = b.role_id
+                        JOIN iam_role_permission rp ON rp.role_id = r.id
+                        JOIN iam_permission p ON p.id = rp.permission_id
+                        WHERE b.user_id = ?
+                          AND b.status = 1
+                          AND p.status = 1
+                          AND p.code IN (%s)
+                          AND (b.effective_from IS NULL OR b.effective_from <= CURRENT_TIMESTAMP(3))
+                          AND (b.effective_to IS NULL OR b.effective_to > CURRENT_TIMESTAMP(3))
+                        """.formatted(placeholders),
+                (rs, rowNum) -> new EffectivePermissionGrant(
+                        rs.getString("role_level"),
+                        rs.getString("binding_scope"),
+                        rs.getObject("business_domain_id", Long.class),
+                        rs.getString("permission_scope")),
+                args.toArray());
     }
 
     private <T> T getOrLoad(Map<String, CacheEntry<T>> cache, String key, Supplier<T> supplier) {
@@ -1534,5 +1728,17 @@ public class IamService {
             List<IamResource> menus,
             List<IamResource> actions,
             String issuedAt) {
+    }
+
+    private record RoutePermission(
+            String code,
+            String pathPattern) {
+    }
+
+    private record EffectivePermissionGrant(
+            String roleLevel,
+            String bindingScope,
+            Long businessDomainId,
+            String permissionScope) {
     }
 }

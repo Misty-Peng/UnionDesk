@@ -68,7 +68,7 @@ export function Detail({
 					onCloseChange();
 				}
 			}}
-			labelCol={{ md: 5, xl: 3 }}
+			labelCol={{ span: 6 }}
 			// wrapperCol={{ span: 24 }}
 			layout="horizontal"
 			form={form}
@@ -128,7 +128,7 @@ export function Detail({
 											required: true,
 										},
 									]}
-									labelCol={{ md: 5, xl: 6 }}
+									labelCol={{ span: 6 }}
 									colProps={{ md: 24, xl: 12 }}
 									name="name"
 									label={t("system.menu.name")}
@@ -142,7 +142,7 @@ export function Detail({
 											required: true,
 										},
 									]}
-									labelCol={{ md: 5, xl: 6 }}
+									labelCol={{ span: 6 }}
 									colProps={{ md: 24, xl: 12 }}
 									name="path"
 									label={t("system.menu.routePath")}
@@ -155,7 +155,7 @@ export function Detail({
 											required: true,
 										},
 									]}
-									labelCol={{ md: 5, xl: 6 }}
+									labelCol={{ span: 6 }}
 									colProps={{ md: 24, xl: 12 }}
 									name="order"
 									label={t("system.menu.menuOrder")}
@@ -168,7 +168,7 @@ export function Detail({
 											required: true,
 										},
 									]}
-									labelCol={{ md: 5, xl: 6 }}
+									labelCol={{ span: 6 }}
 									colProps={{ md: 24, xl: 12 }}
 									name="icon"
 									label={t("system.menu.menuIcon")}
@@ -181,7 +181,7 @@ export function Detail({
 											required: true,
 										},
 									]}
-									labelCol={{ md: 5, xl: 6 }}
+									labelCol={{ span: 6 }}
 									colProps={{ md: 24, xl: 12 }}
 									name="component"
 									label={t("system.menu.componentUrl")}
@@ -191,7 +191,7 @@ export function Detail({
 									name="status"
 									label={t("common.status")}
 									radioType="button"
-									labelCol={{ md: 5, xl: 6 }}
+									labelCol={{ span: 6 }}
 									colProps={{ md: 24, xl: 12 }}
 									options={[
 										{
@@ -209,7 +209,7 @@ export function Detail({
 									name="keepAlive"
 									label={t("system.menu.keepAlive")}
 									radioType="button"
-									labelCol={{ md: 5, xl: 6 }}
+									labelCol={{ span: 6 }}
 									colProps={{ md: 24, xl: 12 }}
 									options={[
 										{
@@ -227,7 +227,7 @@ export function Detail({
 									name="hideInMenu"
 									label={t("system.menu.hideInMenu")}
 									radioType="button"
-									labelCol={{ md: 5, xl: 6 }}
+									labelCol={{ span: 6 }}
 									colProps={{ md: 24, xl: 12 }}
 									options={[
 										{
@@ -243,7 +243,7 @@ export function Detail({
 
 								<ProFormText
 									allowClear
-									labelCol={{ md: 5, xl: 6 }}
+									labelCol={{ span: 6 }}
 									colProps={{ md: 24, xl: 12 }}
 									name="currentActiveMenu"
 									label={t("system.menu.currentActiveMenu")}
@@ -251,7 +251,7 @@ export function Detail({
 
 								<ProFormText
 									allowClear
-									labelCol={{ md: 5, xl: 6 }}
+									labelCol={{ span: 6 }}
 									colProps={{ md: 24, xl: 12 }}
 									name="iframeLink"
 									label={t("system.menu.iframeLink")}
@@ -259,7 +259,7 @@ export function Detail({
 
 								<ProFormText
 									allowClear
-									labelCol={{ md: 5, xl: 6 }}
+									labelCol={{ span: 6 }}
 									colProps={{ md: 24, xl: 12 }}
 									name="externalLink"
 									label={t("system.menu.externalLink")}

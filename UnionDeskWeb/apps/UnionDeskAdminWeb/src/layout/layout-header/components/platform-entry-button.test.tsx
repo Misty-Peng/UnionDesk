@@ -5,17 +5,14 @@ const mocks = vi.hoisted(() => {
 	return {
 		navigate: vi.fn(),
 		assign: vi.fn(),
-		hasAccessByRoles: vi.fn(),
+		platformAccess: false,
 		pathname: "/system/menu",
 	};
 });
 
-vi.mock("#src/hooks/use-access", () => ({
-	AccessControlRoles: {
-		admin: "admin",
-	},
-	useAccess: () => ({
-		hasAccessByRoles: mocks.hasAccessByRoles,
+vi.mock("#src/store/user", () => ({
+	useUserStore: (selector: (state: { platformAccess: boolean }) => unknown) => selector({
+		platformAccess: mocks.platformAccess,
 	}),
 }));
 
@@ -33,15 +30,15 @@ describe("PlatformEntryButton", () => {
 	beforeEach(() => {
 		mocks.navigate.mockReset();
 		mocks.assign.mockReset();
-		mocks.hasAccessByRoles.mockReset();
+		mocks.platformAccess = false;
 		Object.defineProperty(window.location, "assign", {
 			configurable: true,
 			value: mocks.assign,
 		});
 	});
 
-	it("renders platform entry for platform admins and navigates to the platform home", () => {
-		mocks.hasAccessByRoles.mockReturnValue(true);
+	it("renders platform entry when the permission snapshot grants platform access", () => {
+		mocks.platformAccess = true;
 		mocks.pathname = "/system/menu";
 
 		render(<PlatformEntryButton />);
@@ -55,7 +52,7 @@ describe("PlatformEntryButton", () => {
 	});
 
 	it("shows return label on the platform page", () => {
-		mocks.hasAccessByRoles.mockReturnValue(true);
+		mocks.platformAccess = true;
 		mocks.pathname = "/platform/home";
 
 		render(<PlatformEntryButton />);
@@ -69,7 +66,7 @@ describe("PlatformEntryButton", () => {
 	});
 
 	it("does not render without platform access", () => {
-		mocks.hasAccessByRoles.mockReturnValue(false);
+		mocks.platformAccess = false;
 		mocks.pathname = "/system/menu";
 
 		render(<PlatformEntryButton />);

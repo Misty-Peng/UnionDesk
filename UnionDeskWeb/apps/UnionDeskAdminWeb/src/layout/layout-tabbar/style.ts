@@ -13,6 +13,9 @@ export const useStyles = createUseStyles(({ token }) => {
 			},
 			"& .ant-tabs-nav": {
 				"margin": 0,
+				"& .ant-tabs-nav-wrap": {
+					paddingLeft: 16,
+				},
 				"& .ant-tabs-tab": {
 					// antd 自带的动画和 DND 动画冲突
 					transition: "inherit",

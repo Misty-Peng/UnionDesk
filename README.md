@@ -2,7 +2,7 @@
 
 > 面向企业客户服务场景的多业务域工单平台，统一处理 **咨询**、**工单**、**反馈/建议** 三类请求。
 
-当前仓库为 UnionDesk 的项目工作区，**尚处于启动阶段**：产品需求、系统架构、数据库设计、技术栈方案已沉淀在 `doc/`，代码仓库（`UnionDesk/` 后端、`UnionDeskWeb/` 前端）尚未初始化。本 README 用于描述当前真实状态与下一步动作；`AGENTS.md` 用于约束后续开发协作。
+当前仓库为 UnionDesk 的项目工作区。产品需求、系统架构、数据库设计、技术栈方案已沉淀在 `doc/`；前端工作区 `UnionDeskWeb/` 已初始化（含 `UnionDeskAdminWeb` 管理端与 `UnionDeskCustomerWeb` 客户端），后端 `UnionDesk/` 已存在 Spring Boot + Flyway + MyBatis 工程，当前重点是修复并稳定启动链路与迁移链路。本 README 用于描述当前真实状态与下一步动作；`AGENTS.md` 用于约束后续开发协作。
 
 ---
 
@@ -13,33 +13,37 @@ UnionDesk/
 ├─ AGENTS.md                # 开发协作与代码代理（Agent）指导规范
 ├─ README.md                # 本文件
 ├─ doc/                     # 中文设计文档
-│  ├─ PRD.md                # 产品需求文档
+│  ├─ 产品需求文档 v1.0.md   # 产品需求文档（唯一需求真相源）
 │  ├─ 系统架构设计.md        # 模块化单体架构 + 演进路线
 │  ├─ 数据库设计.md          # 实体、索引、生命周期
 │  ├─ 技术栈方案.md          # 前后端、数据、日志、部署选型
-│  ├─ schema.sql            # MySQL 8 初始化 DDL
 │  └─ README.md             # 文档总览
-├─ UnionDesk/               # 后端服务工程（待初始化）
-└─ UnionDeskWeb/            # 前端工作区（待初始化，含客户端 + 管理端）
+├─ UnionDesk/               # 后端服务工程（已存在，启动链路待稳定）
+└─ UnionDeskWeb/            # 前端工作区（已初始化）
+   ├─ apps/UnionDeskAdminWeb     # 管理端
+   ├─ apps/UnionDeskCustomerWeb  # 客户端
+   └─ packages/                  # 共享包
 ```
 
 ## 2. 项目定位
 
 - **UnionDesk**（后端）：身份认证、IAM、业务域、工单、咨询、反馈、通知、审计，统一 REST API。
 - **UnionDeskWeb**（前端）：Monorepo，包含：
-  - `apps/customer-web`：客户端（提单、查单、反馈）
-  - `apps/admin-web`：管理端（客服工作台、配置、权限）
-  - `packages/shared`：共享 API Client、类型、组件
+  - `apps/UnionDeskCustomerWeb`：客户端（提单、查单、反馈）
+  - `apps/UnionDeskAdminWeb`：管理端（客服工作台、配置、权限）
+  - `packages/`：共享 API Client、类型、组件
 
 详细职责与模块划分见 `doc/系统架构设计.md`。
 
-## 3. MVP 目标（摘自 PRD）
+## 3. MVP 目标（摘自 PRD V1.0）
 
-1. 多业务域的数据与权限隔离。
-2. 每个业务域独立配置工单类型与动态字段。
-3. 打通"客户提交 → 客服处理 → 关闭"闭环。
-4. SLA 规则与超时预警。
-5. 预留知识库二期接口。
+MVP 按 P0 / P1 / P2 三个批次交付，详见 `doc/产品需求文档 v1.0.md § 1.4`。
+
+**P0 最小闭环**：身份登录、业务域管理、RBAC、客户提单、客服处理、基础 SLA、审计日志、站内信必达 + SMTP 可用时邮件、基础附件上传、健康检查、最小部署。
+
+**P1 增强**：在线咨询、咨询转工单、满意度评价、反馈/建议、动态表单引擎、批量操作、客户注销。
+
+**P2 平台化**：知识库全流程、VitePress 帮助中心、全文搜索、群发通知、归档导出、安全告警、灰度发布。
 
 ## 4. 技术栈基线
 
@@ -64,11 +68,13 @@ UnionDesk/
 
 - [x] 产品需求文档 PRD
 - [x] 系统架构设计文档
-- [x] 数据库设计文档 + `schema.sql`
+- [x] 数据库设计文档
 - [x] 技术栈方案
 - [x] `AGENTS.md` 开发协作规范
-- [ ] 后端工程脚手架（Spring Boot + Flyway + MyBatis）
-- [ ] 前端 Monorepo 脚手架（pnpm + Vite + AntD）
+- [x] 前端 Monorepo 脚手架（pnpm + Vite + AntD）
+- [x] 管理端平台入口、菜单/角色基础页面
+- [x] 后端工程脚手架（Spring Boot + Flyway + MyBatis）
+- [ ] 后端启动链路与 Flyway 迁移链路稳定化
 - [ ] 本地一键启动（docker compose + MySQL + MinIO）
 - [ ] 鉴权与 IAM 最小闭环
 - [ ] 工单核心闭环（提交 → 处理 → 关闭）
@@ -76,8 +82,8 @@ UnionDesk/
 ## 6. 下一步路线
 
 ### 阶段 0：基础设施
-1. 初始化 `UnionDesk/` Spring Boot 工程，接入 Flyway 执行 `doc/schema.sql`。
-2. 初始化 `UnionDeskWeb/` pnpm workspace，拆出 `apps/customer-web`、`apps/admin-web`、`packages/shared`。
+1. 稳定 `UnionDesk/` Spring Boot 启动链路，按 Flyway 执行并验证迁移脚本（见 `doc/数据模型迁移策略.md`）。
+2. `UnionDeskWeb/` 已初始化，含 `apps/UnionDeskAdminWeb`、`apps/UnionDeskCustomerWeb`、`packages/`。
 3. 提供 `docker-compose.yml`（MySQL 8、Redis、MinIO）。
 
 ### 阶段 1：最小闭环
@@ -95,7 +101,7 @@ UnionDesk/
 
 ## 7. 快速开始（占位）
 
-> 后端 / 前端工程尚未落地，以下命令将在阶段 0 完成后生效。当前请先阅读 `AGENTS.md` 与 `doc/` 下设计文档。
+> 后端工程已存在，但启动链路仍在 Sprint 0 稳定中；前端已可本地启动。
 
 ```powershell
 # 启动依赖（MySQL / Redis / MinIO）
@@ -106,17 +112,27 @@ cd UnionDesk
 .\mvnw.cmd spring-boot:run
 
 # 前端
-cd ..\UnionDeskWeb
+cd UnionDeskWeb
 pnpm install
-pnpm -C apps/customer-web dev
-pnpm -C apps/admin-web dev
+pnpm -C apps/UnionDeskCustomerWeb dev
+pnpm -C apps/UnionDeskAdminWeb dev
 ```
 
 ## 8. 参考
 
-- 产品需求：`doc/PRD.md`
+- 产品需求：`doc/产品需求文档 v1.0.md`（唯一需求真相源）
 - 系统架构：`doc/系统架构设计.md`
 - 数据库设计：`doc/数据库设计.md`
 - 技术栈方案：`doc/技术栈方案.md`
-- 初始化 DDL：`doc/schema.sql`
+- 数据迁移：`doc/数据模型迁移策略.md`
 - 开发协作规范：`AGENTS.md`
+- GitNexus（`analyze --embeddings`）Windows / 网络修复与重装后打补丁：`scripts/gitnexus/README.md`
+
+## 9. 编码规范
+
+- 仓库文本文件统一使用 **UTF-8（无 BOM）**。
+- 提交前请在前端工作区执行编码检查：
+
+```powershell
+pnpm --dir UnionDeskWeb run check:utf8
+```

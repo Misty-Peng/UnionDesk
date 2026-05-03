@@ -2,7 +2,7 @@ import type { AppRouteRecordRaw } from "#src/router/types";
 
 import { platformHomePath, platformPath } from "#src/router/extra-info";
 
-import { ApartmentOutlined, AppstoreOutlined, DashboardOutlined, MenuOutlined, TeamOutlined, UserDeleteOutlined, UserOutlined } from "@ant-design/icons";
+import { ApartmentOutlined, AppstoreOutlined, DashboardOutlined, ImportOutlined, MenuOutlined, TeamOutlined, UserDeleteOutlined, UserOutlined } from "@ant-design/icons";
 import { createElement, lazy } from "react";
 
 import ContainerLayout from "#src/layout/container-layout";
@@ -11,6 +11,7 @@ const PlatformHome = lazy(() => import("#src/pages/platform/home"));
 const PlatformUser = lazy(() => import("#src/pages/platform/user"));
 const PlatformDept = lazy(() => import("#src/pages/platform/dept"));
 const PlatformOffboardPool = lazy(() => import("#src/pages/platform/offboard-pool"));
+const PlatformImportExport = lazy(() => import("#src/pages/platform/import-export"));
 const PlatformRole = lazy(() => import("#src/pages/system/role"));
 const PlatformMenu = lazy(() => import("#src/pages/system/menu"));
 
@@ -20,6 +21,7 @@ const routes: AppRouteRecordRaw[] = [
 		Component: ContainerLayout,
 		handle: {
 			hideInMenu: true,
+			hideInBreadcrumb: true,
 			title: "平台管理",
 			icon: createElement(AppstoreOutlined),
 			roles: ["admin"],
@@ -73,6 +75,19 @@ const routes: AppRouteRecordRaw[] = [
 					permissions: [
 						"permission:button:update",
 						"permission:button:delete",
+					],
+				},
+			},
+			{
+				path: `${platformPath}/import-export`,
+				Component: PlatformImportExport,
+				handle: {
+					title: "导入导出",
+					icon: createElement(ImportOutlined),
+					roles: ["admin"],
+					permissions: [
+						"permission:button:add",
+						"permission:button:update",
 					],
 				},
 			},

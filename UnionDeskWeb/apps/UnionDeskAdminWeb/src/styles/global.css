@@ -28,3 +28,35 @@ html.color-blind-mode {
 html.gray-mode {
 	@apply grayscale;
 }
+
+/*
+ * 修复 @ant-design/pro-components 在 antd cssVar 模式下主题切换不生效的问题。
+ * pro-components v3 预发版的 CSS-in-JS 可能未使用 CSS 变量引用，
+ * 加上 KeepAlive 缓存阻止重新渲染，导致切换深色/浅色时样式不更新。
+ * 这里使用 antd CSS 变量强制覆盖关键背景、文字和边框颜色。
+ */
+.ant-pro-card {
+	background-color: var(--ant-color-bg-container) !important;
+	color: var(--ant-color-text) !important;
+}
+
+.ant-pro-card-border {
+	border-color: var(--ant-color-border-secondary) !important;
+}
+
+.ant-pro-table-list-toolbar-container {
+	color: var(--ant-color-text) !important;
+}
+
+.ant-pro-table-list-toolbar-title {
+	color: var(--ant-color-text) !important;
+}
+
+.ant-pro-query-filter {
+	background-color: var(--ant-color-bg-container) !important;
+	color: var(--ant-color-text) !important;
+}
+
+.ant-pro-form {
+	color: var(--ant-color-text) !important;
+}

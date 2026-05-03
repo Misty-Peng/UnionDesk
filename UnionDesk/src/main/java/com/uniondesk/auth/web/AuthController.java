@@ -1,6 +1,7 @@
 package com.uniondesk.auth.web;
 
 import com.uniondesk.auth.core.AuthService;
+import com.uniondesk.auth.core.AuthCaptchaService;
 import com.uniondesk.auth.core.AuthClientHeaders;
 import com.uniondesk.auth.core.LoginAuditService.LoginLog;
 import com.uniondesk.auth.core.LoginConfigService.LoginConfig;
@@ -28,9 +29,23 @@ import org.springframework.web.bind.annotation.RequestHeader;
 public class AuthController {
 
     private final AuthService authService;
+    private final AuthCaptchaService authCaptchaService;
 
-    public AuthController(AuthService authService) {
+    public AuthController(AuthService authService, AuthCaptchaService authCaptchaService) {
         this.authService = authService;
+        this.authCaptchaService = authCaptchaService;
+    }
+
+    @PostMapping("/captcha/challenge")
+    public AuthDtos.CaptchaChallengeResponse captchaChallenge() {
+        AuthCaptchaService.CaptchaChallenge challenge = authCaptchaService.createChallenge();
+        return new AuthDtos.CaptchaChallengeResponse(challenge.challengeId(), challenge.expiresInSeconds());
+    }
+
+    @PostMapping("/captcha/verify")
+    public AuthDtos.CaptchaVerifyResponse verifyCaptcha(@Valid @RequestBody AuthDtos.CaptchaVerifyRequest request) {
+        AuthCaptchaService.CaptchaToken token = authCaptchaService.verify(request.challengeId(), request.track());
+        return new AuthDtos.CaptchaVerifyResponse(token.captchaToken(), token.expiresInSeconds());
     }
 
     @PostMapping("/login")

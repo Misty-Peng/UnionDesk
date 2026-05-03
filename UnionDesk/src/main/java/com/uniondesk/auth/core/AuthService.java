@@ -35,6 +35,7 @@ public class AuthService {
     private final JwtTokenService jwtTokenService;
     private final PasswordEncoder passwordEncoder;
     private final DemoDataService demoDataService;
+    private final AuthCaptchaService authCaptchaService;
     private final Clock clock;
 
     public AuthService(
@@ -47,6 +48,7 @@ public class AuthService {
             JwtTokenService jwtTokenService,
             PasswordEncoder passwordEncoder,
             DemoDataService demoDataService,
+            AuthCaptchaService authCaptchaService,
             Clock clock) {
         this.loginAccountService = loginAccountService;
         this.authClientService = authClientService;
@@ -57,6 +59,7 @@ public class AuthService {
         this.jwtTokenService = jwtTokenService;
         this.passwordEncoder = passwordEncoder;
         this.demoDataService = demoDataService;
+        this.authCaptchaService = authCaptchaService;
         this.clock = clock;
     }
 
@@ -72,6 +75,12 @@ public class AuthService {
 
         LoginIdentifierType identifierType = LoginIdentifierType.detect(request.username());
         LoginConfig config = loginConfigService.loadConfig();
+        if (config.captchaEnabled()) {
+            if (!StringUtils.hasText(request.captchaToken())) {
+                throw new AuthCaptchaException("请先完成滑块验证");
+            }
+            authCaptchaService.consumeToken(request.captchaToken());
+        }
         if (!isIdentifierTypeEnabled(config, identifierType) || !config.passwordLoginEnabled()) {
             loginAuditService.record(loginAuditService.loginFailure(
                     null,

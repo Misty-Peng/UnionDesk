@@ -1,10 +1,13 @@
+import type { PlatformOrganizationView } from "@uniondesk/shared";
 import type { DataNode } from "antd/es/tree";
 import type { TableProps } from "antd";
 
+import { fetchPlatformOrganizations } from "#src/api/platform/organization";
 import { BasicContent } from "#src/components/basic-content";
 
 import { ApartmentOutlined, PlusCircleOutlined } from "@ant-design/icons";
-import { Button, Card, Col, Row, Space, Table, Tag, Tree, Typography } from "antd";
+import { Alert, Button, Card, Col, Row, Space, Table, Tag, Tree, Typography } from "antd";
+import { useEffect, useState } from "react";
 
 interface DeptRow {
 	id: number;
@@ -13,54 +16,54 @@ interface DeptRow {
 	parentName: string;
 	leader: string;
 	sortNo: number;
-	status: "enabled" | "disabled";
+	status: number;
 	remark: string;
 }
 
-const treeData: DataNode[] = [
-	{
-		key: "platform",
-		title: "平台组织",
-		children: [
-			{ key: "platform-ops", title: "平台运营部" },
-			{ key: "security-audit", title: "安全审计组" },
-			{ key: "service-governance", title: "服务治理组" },
-		],
-	},
-];
+function buildTreeData(units: PlatformOrganizationView[]): DataNode[] {
+	const nodeMap = new Map<string, DataNode>();
+	const rootNodes: DataNode[] = [];
 
-const deptRows: DeptRow[] = [
-	{
-		id: 1,
-		code: "platform-ops",
-		name: "平台运营部",
-		parentName: "平台组织",
-		leader: "平台管理员",
-		sortNo: 10,
-		status: "enabled",
-		remark: "负责平台账号、角色和业务域配置。",
-	},
-	{
-		id: 2,
-		code: "security-audit",
-		name: "安全审计组",
-		parentName: "平台组织",
-		leader: "审计人员",
-		sortNo: 20,
-		status: "enabled",
-		remark: "负责审计日志和安全策略核查。",
-	},
-	{
-		id: 3,
-		code: "service-governance",
-		name: "服务治理组",
-		parentName: "平台组织",
-		leader: "-",
-		sortNo: 30,
-		status: "disabled",
-		remark: "预留组织节点。",
-	},
-];
+	for (const unit of units) {
+		nodeMap.set(String(unit.id), {
+			key: String(unit.id),
+			title: unit.name,
+			children: [],
+		});
+	}
+
+	for (const unit of units) {
+		const node = nodeMap.get(String(unit.id));
+		if (!node) {
+			continue;
+		}
+		if (unit.parentId == null) {
+			rootNodes.push(node);
+			continue;
+		}
+		const parentNode = nodeMap.get(String(unit.parentId));
+		if (!parentNode) {
+			rootNodes.push(node);
+			continue;
+		}
+		parentNode.children = [...(parentNode.children ?? []), node];
+	}
+
+	return rootNodes;
+}
+
+function toDeptRow(unit: PlatformOrganizationView): DeptRow {
+	return {
+		id: unit.id,
+		code: unit.code,
+		name: unit.name,
+		parentName: unit.parentName || "-",
+		leader: unit.leaderName || "-",
+		sortNo: unit.orderNo,
+		status: unit.status,
+		remark: unit.remark || "-",
+	};
+}
 
 const columns: TableProps<DeptRow>["columns"] = [
 	{
@@ -93,8 +96,8 @@ const columns: TableProps<DeptRow>["columns"] = [
 		dataIndex: "status",
 		width: 100,
 		render: (_, record) => (
-			<Tag color={record.status === "enabled" ? "success" : "default"}>
-				{record.status === "enabled" ? "启用" : "停用"}
+			<Tag color={record.status === 1 ? "success" : "default"}>
+				{record.status === 1 ? "启用" : "停用"}
 			</Tag>
 		),
 	},
@@ -105,6 +108,41 @@ const columns: TableProps<DeptRow>["columns"] = [
 ];
 
 export default function PlatformDept() {
+	const [deptRows, setDeptRows] = useState<DeptRow[]>([]);
+	const [treeData, setTreeData] = useState<DataNode[]>([]);
+	const [loading, setLoading] = useState(false);
+	const [loadError, setLoadError] = useState<string | null>(null);
+
+	useEffect(() => {
+		let ignore = false;
+
+		setLoading(true);
+		fetchPlatformOrganizations()
+			.then((units) => {
+				if (ignore) {
+					return;
+				}
+				setDeptRows(units.map(toDeptRow));
+				setTreeData(buildTreeData(units));
+				setLoadError(null);
+			})
+			.catch(() => {
+				if (ignore) {
+					return;
+				}
+				setLoadError("平台组织加载失败，请稍后重试。");
+			})
+			.finally(() => {
+				if (!ignore) {
+					setLoading(false);
+				}
+			});
+
+		return () => {
+			ignore = true;
+		};
+	}, []);
+
 	return (
 		<BasicContent className="h-full bg-colorBgLayout">
 			<Row gutter={[16, 16]} className="h-full">
@@ -133,10 +171,14 @@ export default function PlatformDept() {
 						<Typography.Paragraph type="secondary">
 							组织树用于承载平台内部人员归属，与业务域配置分开维护。
 						</Typography.Paragraph>
+						{loadError
+							? <Alert type="error" showIcon message={loadError} className="!mb-4" />
+							: null}
 						<Table<DeptRow>
 							rowKey="id"
 							columns={columns}
 							dataSource={deptRows}
+							loading={loading}
 							pagination={false}
 							scroll={{ x: 900 }}
 						/>

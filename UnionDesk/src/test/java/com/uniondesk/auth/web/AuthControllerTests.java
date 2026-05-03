@@ -11,6 +11,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.uniondesk.auth.core.AuthService;
+import com.uniondesk.auth.core.AuthCaptchaService;
 import com.uniondesk.auth.core.AuthenticationFailedException;
 import com.uniondesk.auth.core.LoginAuditService.LoginLog;
 import com.uniondesk.auth.core.LoginConfigService.LoginConfig;
@@ -32,6 +33,46 @@ class AuthControllerTests {
     }
 
     @Test
+    void captchaChallengeReturnsChallengeId() throws Exception {
+        AuthService authService = mock(AuthService.class);
+        AuthCaptchaService authCaptchaService = mock(AuthCaptchaService.class);
+        when(authCaptchaService.createChallenge())
+                .thenReturn(new AuthCaptchaService.CaptchaChallenge("challenge-1", 120));
+        MockMvc mockMvc = mockMvc(authService, authCaptchaService);
+
+        mockMvc.perform(post("/api/v1/auth/captcha/challenge"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.challengeId").value("challenge-1"))
+                .andExpect(jsonPath("$.expiresInSeconds").value(120));
+    }
+
+    @Test
+    void captchaVerifyReturnsToken() throws Exception {
+        AuthService authService = mock(AuthService.class);
+        AuthCaptchaService authCaptchaService = mock(AuthCaptchaService.class);
+        when(authCaptchaService.verify(
+                org.mockito.ArgumentMatchers.eq("challenge-1"),
+                org.mockito.ArgumentMatchers.anyList()))
+                .thenReturn(new AuthCaptchaService.CaptchaToken("captcha-token-1", 120));
+        MockMvc mockMvc = mockMvc(authService, authCaptchaService);
+
+        mockMvc.perform(post("/api/v1/auth/captcha/verify")
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "challengeId": "challenge-1",
+                                  "track": [
+                                    {"x": 0, "t": 0},
+                                    {"x": 320, "t": 900}
+                                  ]
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.captchaToken").value("captcha-token-1"))
+                .andExpect(jsonPath("$.expiresInSeconds").value(120));
+    }
+
+    @Test
     void loginFailureMapsToUnauthorized() throws Exception {
         AuthService authService = org.mockito.Mockito.mock(AuthService.class);
         when(authService.login(
@@ -40,7 +81,7 @@ class AuthControllerTests {
                 org.mockito.ArgumentMatchers.anyString(),
                 org.mockito.ArgumentMatchers.anyString()))
                 .thenThrow(new AuthenticationFailedException("invalid credentials"));
-        MockMvc mockMvc = MockMvcBuilders.standaloneSetup(new AuthController(authService))
+        MockMvc mockMvc = MockMvcBuilders.standaloneSetup(new AuthController(authService, mock(AuthCaptchaService.class)))
                 .setControllerAdvice(new com.uniondesk.common.web.ApiExceptionHandler())
                 .build();
 
@@ -210,7 +251,11 @@ class AuthControllerTests {
     }
 
     private MockMvc mockMvc(AuthService authService) {
-        return MockMvcBuilders.standaloneSetup(new AuthController(authService))
+        return mockMvc(authService, mock(AuthCaptchaService.class));
+    }
+
+    private MockMvc mockMvc(AuthService authService, AuthCaptchaService authCaptchaService) {
+        return MockMvcBuilders.standaloneSetup(new AuthController(authService, authCaptchaService))
                 .setControllerAdvice(new com.uniondesk.common.web.ApiExceptionHandler())
                 .build();
     }

@@ -83,6 +83,27 @@ class JwtAuthenticationFilterTests {
     }
 
     @Test
+    void allowsAnonymousLoginConfigRequest() throws ServletException, IOException {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/auth/login-config");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        AtomicReference<Boolean> chainInvoked = new AtomicReference<>(false);
+        AtomicReference<Authentication> authenticationRef = new AtomicReference<>();
+        AtomicReference<UserContext> contextRef = new AtomicReference<>();
+        FilterChain chain = (req, res) -> {
+            chainInvoked.set(true);
+            authenticationRef.set(SecurityContextHolder.getContext().getAuthentication());
+            contextRef.set(UserContextHolder.current().orElse(null));
+        };
+
+        filter.doFilter(request, response, chain);
+
+        assertThat(chainInvoked.get()).isTrue();
+        assertThat(response.getStatus()).isEqualTo(200);
+        assertThat(authenticationRef.get()).isNull();
+        assertThat(contextRef.get()).isNull();
+    }
+
+    @Test
     void leavesProtectedRequestUnauthenticatedWhenTokenMissing() throws ServletException, IOException {
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/tickets");
         request.addHeader(AuthClientHeaders.CLIENT_CODE_HEADER, "ud-admin-web");

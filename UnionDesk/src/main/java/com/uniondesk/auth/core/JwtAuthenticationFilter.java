@@ -28,6 +28,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private static final List<String> PUBLIC_PATHS = List.of(
             "/api/v1/health",
             "/api/v1/auth/login",
+            "/api/v1/auth/login-config",
             "/actuator/health",
             "/error");
 
@@ -53,7 +54,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         try {
             UserContextHolder.clear();
             SecurityContextHolder.clearContext();
-            if (PUBLIC_PATHS.contains(request.getRequestURI()) || "OPTIONS".equalsIgnoreCase(request.getMethod())) {
+            if (isPublicPath(request.getRequestURI()) || "OPTIONS".equalsIgnoreCase(request.getMethod())) {
                 filterChain.doFilter(request, response);
                 return;
             }
@@ -114,6 +115,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
         String token = header.substring(BEARER_PREFIX.length()).trim();
         return token.isEmpty() ? Optional.empty() : Optional.of(token);
+    }
+
+    private boolean isPublicPath(String requestUri) {
+        return PUBLIC_PATHS.contains(requestUri) || requestUri.startsWith("/api/v1/auth/captcha/");
     }
 
     private void writeUnauthorized(HttpServletResponse response, String message) throws IOException {

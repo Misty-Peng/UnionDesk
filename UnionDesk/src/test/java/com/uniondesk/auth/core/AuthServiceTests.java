@@ -56,6 +56,9 @@ class AuthServiceTests {
     @Mock
     private DemoDataService demoDataService;
 
+    @Mock
+    private AuthCaptchaService authCaptchaService;
+
     private final JwtTokenService jwtTokenService = new JwtTokenService(
             new ObjectMapper(),
             "uniondesk-demo-jwt-secret-please-change-me",
@@ -79,6 +82,7 @@ class AuthServiceTests {
                 jwtTokenService,
                 passwordEncoder,
                 demoDataService,
+                authCaptchaService,
                 CLOCK);
     }
 
@@ -191,5 +195,70 @@ class AuthServiceTests {
                 .isInstanceOf(AuthenticationFailedException.class)
                 .hasMessage("invalid credentials");
         verify(loginAuditService).record(any());
+    }
+
+    @Test
+    void loginConsumesCaptchaTokenWhenCaptchaEnabled() {
+        LoginAccount account = new LoginAccount(2L, "admin", "13900000000", "admin@uniondesk.local",
+                passwordEncoder.encode("admin123"), 1, "admin", "active");
+        LoginConfig config = new LoginConfig(
+                true,
+                true,
+                true,
+                true,
+                true,
+                false,
+                null,
+                null,
+                604800,
+                10,
+                LocalDateTime.now(CLOCK));
+        BusinessDomainView domain = new BusinessDomainView(1L, "default", "Default Domain", "global", 1, 0, 0, 0, 0);
+
+        when(authClientService.findByCode("ud-admin-web")).thenReturn(Optional.of(new AuthClient("ud-admin-web", "admin", 1)));
+        when(loginConfigService.loadConfig()).thenReturn(config);
+        when(loginAccountService.findByIdentifier("admin", LoginIdentifierType.USERNAME))
+                .thenReturn(Optional.of(account));
+        when(iamService.listUserRoleCodesByClient(2L, "ud-admin-web")).thenReturn(List.of("super_admin"));
+        when(loginAccountService.loadAccessibleDomainIds(2L, List.of("super_admin"))).thenReturn(List.of(1L));
+        when(demoDataService.listBusinessDomains()).thenReturn(List.of(domain));
+        when(loginSessionService.createSession(any(LoginSessionService.CreateSessionCommand.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0, LoginSessionService.CreateSessionCommand.class).sid());
+
+        AuthDtos.LoginResponse response = authService.login(
+                new AuthDtos.LoginRequest("admin", "admin123", "captcha-token-1"),
+                "ud-admin-web",
+                "127.0.0.1",
+                "JUnit");
+
+        assertThat(response.clientCode()).isEqualTo("ud-admin-web");
+        verify(authCaptchaService).consumeToken("captcha-token-1");
+    }
+
+    @Test
+    void loginRejectsMissingCaptchaTokenWhenCaptchaEnabled() {
+        LoginConfig config = new LoginConfig(
+                true,
+                true,
+                true,
+                true,
+                true,
+                false,
+                null,
+                null,
+                604800,
+                10,
+                LocalDateTime.now(CLOCK));
+
+        when(authClientService.findByCode("ud-admin-web")).thenReturn(Optional.of(new AuthClient("ud-admin-web", "admin", 1)));
+        when(loginConfigService.loadConfig()).thenReturn(config);
+
+        assertThatThrownBy(() -> authService.login(
+                new AuthDtos.LoginRequest("admin", "admin123", null),
+                "ud-admin-web",
+                "127.0.0.1",
+                "JUnit"))
+                .isInstanceOf(AuthCaptchaException.class)
+                .hasMessage("请先完成滑块验证");
     }
 }
