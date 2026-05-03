@@ -31,6 +31,7 @@ import org.springframework.util.StringUtils;
 public class IamService {
 
     private static final Duration CACHE_TTL = Duration.ofSeconds(30);
+    private static final List<String> PROTECTED_ROLE_CODES = List.of("platform_admin", "super_admin");
 
     private final JdbcTemplate jdbcTemplate;
     private final Clock clock;
@@ -853,6 +854,7 @@ public class IamService {
         if ("offboarded".equals(existing.employmentStatus())) {
             return existing;
         }
+        guardLastProtectedRoleHolder(userId);
         LocalDateTime now = LocalDateTime.now(clock);
         jdbcTemplate.update("""
                         UPDATE user_account
@@ -1067,6 +1069,34 @@ public class IamService {
         return roleCodes;
     }
 
+    private void guardLastProtectedRoleHolder(long userId) {
+        List<String> currentRoles = listUserRoleCodes(userId);
+        for (String protectedRole : PROTECTED_ROLE_CODES) {
+            if (currentRoles.contains(protectedRole)) {
+                guardLastProtectedRoleHolder(userId, protectedRole);
+            }
+        }
+    }
+
+    private void guardLastProtectedRoleHolder(long userId, String roleCode) {
+        Integer otherHolderCount = jdbcTemplate.queryForObject("""
+                        SELECT COUNT(DISTINCT ugr.user_id)
+                        FROM user_global_role ugr
+                        JOIN role r ON r.id = ugr.role_id
+                        JOIN user_account ua ON ua.id = ugr.user_id
+                        WHERE r.code = ?
+                          AND ugr.user_id <> ?
+                          AND ua.status = 1
+                          AND ua.employment_status <> 'offboarded'
+                        """,
+                Integer.class,
+                roleCode,
+                userId);
+        if (otherHolderCount == null || otherHolderCount == 0) {
+            throw new IllegalArgumentException("cannot remove the last " + roleCode);
+        }
+    }
+
     private List<Long> listUserDomainIds(long userId) {
         return jdbcTemplate.queryForList("""
                         SELECT DISTINCT business_domain_id
@@ -1119,6 +1149,13 @@ public class IamService {
     private void replaceUserRoleBindings(long userId, List<String> roleCodes, List<Long> businessDomainIds) {
         if (roleCodes == null || roleCodes.isEmpty()) {
             throw new IllegalArgumentException("roleCodes is required");
+        }
+        List<String> currentRoles = listUserRoleCodes(userId);
+        Set<String> newRoleSet = new LinkedHashSet<>(roleCodes);
+        for (String protectedRole : PROTECTED_ROLE_CODES) {
+            if (currentRoles.contains(protectedRole) && !newRoleSet.contains(protectedRole)) {
+                guardLastProtectedRoleHolder(userId, protectedRole);
+            }
         }
         Map<String, RoleDefinition> roleMap = loadRoleDefinitions(roleCodes);
         Set<Long> domainIds = businessDomainIds == null ? Set.of() : new LinkedHashSet<>(businessDomainIds);

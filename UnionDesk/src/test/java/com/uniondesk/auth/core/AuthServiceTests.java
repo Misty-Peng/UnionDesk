@@ -236,6 +236,72 @@ class AuthServiceTests {
     }
 
     @Test
+    void refreshTokenReturnsNewTokenPairWhenSessionActive() {
+        UserContext context = new UserContext(1L, "customer", 10L, "sid-100", "ud-customer-web");
+        String refreshToken = jwtTokenService.issueRefreshToken(context);
+        when(loginSessionService.validateAndTouch("sid-100", "ud-customer-web")).thenReturn(true);
+        AuthDtos.RefreshResponse response = authService.refreshToken(refreshToken);
+        assertThat(response.accessToken()).contains(".");
+        assertThat(response.refreshToken()).contains(".");
+        assertThat(response.tokenType()).isEqualTo("Bearer");
+        assertThat(response.expiresInSeconds()).isGreaterThan(0);
+    }
+
+    @Test
+    void refreshTokenFailsWhenSessionRevoked() {
+        UserContext context = new UserContext(1L, "customer", 10L, "sid-100", "ud-customer-web");
+        String refreshToken = jwtTokenService.issueRefreshToken(context);
+        when(loginSessionService.validateAndTouch("sid-100", "ud-customer-web")).thenReturn(false);
+        assertThatThrownBy(() -> authService.refreshToken(refreshToken))
+                .isInstanceOf(AuthenticationFailedException.class)
+                .hasMessage("session expired or revoked");
+    }
+
+    @Test
+    void refreshTokenFailsWithInvalidToken() {
+        assertThatThrownBy(() -> authService.refreshToken("invalid.token.here"))
+                .isInstanceOf(AuthenticationFailedException.class)
+                .hasMessage("invalid refresh token");
+    }
+
+    @Test
+    void currentUserReturnsAccountDetails() {
+        LoginAccount account = new LoginAccount(1L, "customer", "13800000000", "customer@uniondesk.local",
+                passwordEncoder.encode("customer123"), 1, "customer", "active");
+        UserContext context = new UserContext(1L, "customer", 10L, "sid-100", "ud-customer-web");
+        when(loginAccountService.findById(1L)).thenReturn(Optional.of(account));
+        when(iamService.listUserRoleCodesByClient(1L, "ud-customer-web")).thenReturn(List.of("customer"));
+        AuthDtos.CurrentUserResponse response = authService.currentUser(context);
+        assertThat(response.userId()).isEqualTo(1L);
+        assertThat(response.username()).isEqualTo("customer");
+        assertThat(response.role()).isEqualTo("customer");
+        assertThat(response.roles()).containsExactly("customer");
+    }
+
+    @Test
+    void stepUpSucceedsWithCorrectPassword() {
+        LoginAccount account = new LoginAccount(1L, "admin", "13900000000", "admin@uniondesk.local",
+                passwordEncoder.encode("admin123"), 1, "admin", "active");
+        UserContext context = new UserContext(1L, "super_admin", 10L, "sid-100", "ud-admin-web");
+        when(loginAccountService.findById(1L)).thenReturn(Optional.of(account));
+        AuthDtos.StepUpResponse response = authService.stepUp(context, "admin123");
+        assertThat(response.stepUpToken()).isNotBlank();
+        assertThat(response.mode()).isEqualTo("session_15m");
+        assertThat(response.expiresInSeconds()).isEqualTo(900);
+    }
+
+    @Test
+    void stepUpFailsWithWrongPassword() {
+        LoginAccount account = new LoginAccount(1L, "admin", "13900000000", "admin@uniondesk.local",
+                passwordEncoder.encode("admin123"), 1, "admin", "active");
+        UserContext context = new UserContext(1L, "super_admin", 10L, "sid-100", "ud-admin-web");
+        when(loginAccountService.findById(1L)).thenReturn(Optional.of(account));
+        assertThatThrownBy(() -> authService.stepUp(context, "wrong-password"))
+                .isInstanceOf(AuthenticationFailedException.class)
+                .hasMessage("invalid credentials");
+    }
+
+    @Test
     void loginRejectsMissingCaptchaTokenWhenCaptchaEnabled() {
         LoginConfig config = new LoginConfig(
                 true,

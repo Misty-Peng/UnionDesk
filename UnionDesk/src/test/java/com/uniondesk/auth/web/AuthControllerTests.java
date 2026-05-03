@@ -225,6 +225,91 @@ class AuthControllerTests {
     }
 
     @Test
+    void refreshReturnsNewTokenPair() throws Exception {
+        AuthService authService = mock(AuthService.class);
+        when(authService.refreshToken("old-refresh-token"))
+                .thenReturn(new AuthDtos.RefreshResponse("new-access", "new-refresh", "Bearer", 86400));
+        MockMvc mockMvc = mockMvc(authService);
+
+        mockMvc.perform(post("/api/v1/auth/refresh")
+                        .contentType("application/json")
+                        .content("{\"refreshToken\":\"old-refresh-token\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accessToken").value("new-access"))
+                .andExpect(jsonPath("$.refreshToken").value("new-refresh"))
+                .andExpect(jsonPath("$.tokenType").value("Bearer"))
+                .andExpect(jsonPath("$.expiresInSeconds").value(86400));
+    }
+
+    @Test
+    void refreshWithInvalidTokenReturnsUnauthorized() throws Exception {
+        AuthService authService = mock(AuthService.class);
+        when(authService.refreshToken("bad-token"))
+                .thenThrow(new com.uniondesk.auth.core.AuthenticationFailedException("invalid refresh token"));
+        MockMvc mockMvc = MockMvcBuilders.standaloneSetup(new AuthController(authService, mock(AuthCaptchaService.class)))
+                .setControllerAdvice(new com.uniondesk.common.web.ApiExceptionHandler())
+                .build();
+
+        mockMvc.perform(post("/api/v1/auth/refresh")
+                        .contentType("application/json")
+                        .content("{\"refreshToken\":\"bad-token\"}"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void meReturnsCurrentUserInfo() throws Exception {
+        AuthService authService = mock(AuthService.class);
+        MockMvc mockMvc = mockMvc(authService);
+        UserContextHolder.set(new UserContext(1L, "customer", 10L, "sid-1", "ud-customer-web"));
+        when(authService.currentUser(any(UserContext.class)))
+                .thenReturn(new AuthDtos.CurrentUserResponse(
+                        1L, "customer", "13800000000", "customer@uniondesk.local",
+                        "customer", "ud-customer-web", 10L, java.util.List.of("customer")));
+
+        mockMvc.perform(get("/api/v1/auth/me"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.userId").value(1))
+                .andExpect(jsonPath("$.username").value("customer"))
+                .andExpect(jsonPath("$.role").value("customer"))
+                .andExpect(jsonPath("$.roles[0]").value("customer"));
+    }
+
+    @Test
+    void meWithoutAuthReturnsUnauthorized() throws Exception {
+        MockMvc mockMvc = mockMvc(mock(AuthService.class));
+
+        mockMvc.perform(get("/api/v1/auth/me"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void stepUpReturnsTokenOnSuccess() throws Exception {
+        AuthService authService = mock(AuthService.class);
+        MockMvc mockMvc = mockMvc(authService);
+        UserContextHolder.set(new UserContext(1L, "super_admin", 10L, "sid-1", "ud-admin-web"));
+        when(authService.stepUp(any(UserContext.class), org.mockito.ArgumentMatchers.eq("admin123")))
+                .thenReturn(new AuthDtos.StepUpResponse("step-up-token-1", "session_15m", 900));
+
+        mockMvc.perform(post("/api/v1/auth/step-up")
+                        .contentType("application/json")
+                        .content("{\"password\":\"admin123\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.stepUpToken").value("step-up-token-1"))
+                .andExpect(jsonPath("$.mode").value("session_15m"))
+                .andExpect(jsonPath("$.expiresInSeconds").value(900));
+    }
+
+    @Test
+    void stepUpWithoutAuthReturnsUnauthorized() throws Exception {
+        MockMvc mockMvc = mockMvc(mock(AuthService.class));
+
+        mockMvc.perform(post("/api/v1/auth/step-up")
+                        .contentType("application/json")
+                        .content("{\"password\":\"admin123\"}"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void listLoginLogsReturnsRowsForAdmin() throws Exception {
         AuthService authService = mock(AuthService.class);
         MockMvc mockMvc = mockMvc(authService);

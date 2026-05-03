@@ -428,6 +428,138 @@ export type SendConsultationMessagePayload = {
   content: string;
 };
 
+/** P0 分页响应（doc/P0接口契约表.md） */
+export type P0PageResult<T> = {
+  total: number;
+  list: T[];
+};
+
+export type P0VisibilityPolicyCode = "public" | "domain_customer_only" | "channel_only";
+
+export type P0RegistrationPolicy = "open" | "invitation_only" | "admin_only";
+
+/** 平台 / 域管理侧业务域行（对齐 P0 Domain DTO） */
+export type P0AdminDomain = {
+  id: string;
+  code: string;
+  name: string;
+  logo?: string | null;
+  visibility_policy_codes: P0VisibilityPolicyCode[];
+  registration_policy: P0RegistrationPolicy;
+  status?: string | null;
+  created_at?: string | null;
+};
+
+export type P0CreateAdminDomainPayload = {
+  name: string;
+  code: string;
+  logo?: string;
+  visibility_policy_codes: P0VisibilityPolicyCode[];
+  registration_policy: P0RegistrationPolicy;
+};
+
+export type P0UpdateAdminDomainPayload = {
+  name?: string;
+  logo?: string;
+  visibility_policy_codes?: P0VisibilityPolicyCode[];
+  registration_policy?: P0RegistrationPolicy;
+  status?: string;
+};
+
+export type P0StepUpRequest = {
+  password: string;
+  operation_code: string;
+};
+
+export type P0StepUpResponse = {
+  step_up_token: string;
+  expires_in: number;
+  reuse_policy: "session_15m" | "one_time";
+  operation_code: string;
+};
+
+/** 与 P0 文档示例一致的敏感操作编码占位，后端接入后需与清单保持一致 */
+export const P0_STEP_UP_OPERATION = {
+  DELETE_BUSINESS_DOMAIN: "business_domain.delete",
+  PLATFORM_ROLES_ASSIGN: "staff.platform_roles",
+  DOMAIN_SUPER_ADMIN_GRANT: "domain.super_admin.grant"
+} as const;
+
+export type P0InboxMessage = {
+  id: string;
+  title: string;
+  content?: string | null;
+  jump_url?: string | null;
+  is_read: boolean;
+  domain_name?: string | null;
+  created_at: string;
+};
+
+export type P0InboxPageResponse = {
+  total: number;
+  unread_count: number;
+  list: P0InboxMessage[];
+};
+
+export type P0AdminTicketListItem = {
+  id: string;
+  ticket_no: string;
+  title: string;
+  type_name?: string | null;
+  status: string;
+  priority?: string | null;
+  assignee_name?: string | null;
+  sla_status?: string | null;
+  created_at: string;
+  updated_at?: string | null;
+};
+
+export type P0InvitationCode = {
+  id: string;
+  domain_id: string;
+  code: string;
+  channel?: string | null;
+  expires_at?: string | null;
+  max_uses?: number | null;
+  used_count?: number | null;
+  status?: string | null;
+  created_at?: string | null;
+};
+
+export type P0DomainCustomer = {
+  id: string;
+  customer_account_id?: string | null;
+  display_name: string;
+  phone?: string | null;
+  status: string;
+  source?: string | null;
+  activated_at?: string | null;
+  tags?: string[] | null;
+  created_at?: string | null;
+};
+
+export type P0AttachmentTargetType = "ticket" | "consultation" | "knowledge";
+
+export type P0AttachmentPresignRequest = {
+  file_name: string;
+  mime_type: string;
+  file_size: number;
+  target_type: P0AttachmentTargetType;
+  domain_id: string;
+};
+
+export type P0AttachmentPresignResponse = {
+  attachment_id: string;
+  upload_url: string;
+  expires_in: number;
+};
+
+export type P0AttachmentLocalUploadResponse = {
+  attachment_id: string;
+  download_url: string;
+  storage_type: "local";
+};
+
 export const DEMO_DOMAINS: DemoDomain[] = [
   {
     id: 1,

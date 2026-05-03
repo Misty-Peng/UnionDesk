@@ -5,6 +5,7 @@ import { BasicContent } from "#src/components/basic-content";
 
 import { Alert, Card, Col, List, Row, Space, Statistic, Tag, Typography } from "antd";
 import { useEffect, useState } from "react";
+import { Link } from "react-router";
 
 function resolveAuditTitle(log: LoginLogView): string {
 	return log.result === "success" ? "登录成功" : "登录失败";
@@ -108,6 +109,59 @@ export default function PlatformHome() {
 					{loadError
 						? <Alert type="error" showIcon message={loadError} />
 						: null}
+
+					<Card title="P0 管理端入口" size="small">
+						<Row gutter={[12, 12]}>
+							<Col xs={24} sm={12} md={8}>
+								<Link className="text-[var(--ant-color-primary)]" to="/platform/domains">业务域管理</Link>
+								<Typography.Paragraph type="secondary" className="!mb-0 !mt-1 !text-xs">
+									对齐 `GET/POST/PUT/DELETE /admin/domains` 与可见策略、注册策略
+								</Typography.Paragraph>
+							</Col>
+							<Col xs={24} sm={12} md={8}>
+								<Link className="text-[var(--ant-color-primary)]" to="/platform/user">平台用户</Link>
+								<Typography.Paragraph type="secondary" className="!mb-0 !mt-1 !text-xs">
+									IAM 用户列表与治理占位
+								</Typography.Paragraph>
+							</Col>
+							<Col xs={24} sm={12} md={8}>
+								<Link className="text-[var(--ant-color-primary)]" to="/platform/dept">组织树</Link>
+								<Typography.Paragraph type="secondary" className="!mb-0 !mt-1 !text-xs">
+									平台组织 / 部门只读树与后续导入
+								</Typography.Paragraph>
+							</Col>
+							<Col xs={24} sm={12} md={8}>
+								<Link className="text-[var(--ant-color-primary)]" to="/platform/role">平台角色</Link>
+								<Typography.Paragraph type="secondary" className="!mb-0 !mt-1 !text-xs">
+									角色与权限绑定（敏感授权需 step-up）
+								</Typography.Paragraph>
+							</Col>
+							<Col xs={24} sm={12} md={8}>
+								<Link className="text-[var(--ant-color-primary)]" to="/platform/domain-onboarding">客户入域</Link>
+								<Typography.Paragraph type="secondary" className="!mb-0 !mt-1 !text-xs">
+									邀请码与域客户列表（P0 契约路径）
+								</Typography.Paragraph>
+							</Col>
+							<Col xs={24} sm={12} md={8}>
+								<Link className="text-[var(--ant-color-primary)]" to="/platform/ticket-pool">工单池</Link>
+								<Typography.Paragraph type="secondary" className="!mb-0 !mt-1 !text-xs">
+									管理端工单列表与领取
+								</Typography.Paragraph>
+							</Col>
+							<Col xs={24} sm={12} md={8}>
+								<Link className="text-[var(--ant-color-primary)]" to="/platform/inbox">站内信</Link>
+								<Typography.Paragraph type="secondary" className="!mb-0 !mt-1 !text-xs">
+									`/inbox` 通知中心基础能力
+								</Typography.Paragraph>
+							</Col>
+							<Col xs={24} sm={12} md={8}>
+								<Link className="text-[var(--ant-color-primary)]" to="/platform/attachments">附件</Link>
+								<Typography.Paragraph type="secondary" className="!mb-0 !mt-1 !text-xs">
+									预签名与本地上传契约对齐
+								</Typography.Paragraph>
+							</Col>
+						</Row>
+					</Card>
 
 					<Row gutter={[16, 16]} className="min-h-0 flex-1">
 						<Col xs={24} xl={16} className="min-h-0">

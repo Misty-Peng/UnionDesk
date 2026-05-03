@@ -56,6 +56,21 @@ public class AuthController {
         return authService.login(request, clientCode, httpRequest.getRemoteAddr(), httpRequest.getHeader("User-Agent"));
     }
 
+    @PostMapping("/refresh")
+    public AuthDtos.RefreshResponse refresh(@Valid @RequestBody AuthDtos.RefreshRequest request) {
+        return authService.refreshToken(request.refreshToken());
+    }
+
+    @GetMapping("/me")
+    public AuthDtos.CurrentUserResponse me() {
+        return authService.currentUser(requireCurrentContext());
+    }
+
+    @PostMapping("/step-up")
+    public AuthDtos.StepUpResponse stepUp(@Valid @RequestBody AuthDtos.StepUpRequest request) {
+        return authService.stepUp(requireCurrentContext(), request.password());
+    }
+
     @GetMapping("/login-config")
     public AuthDtos.LoginConfigView loginConfig() {
         LoginConfig config = authService.currentConfig();

@@ -1,8 +1,11 @@
 :root {
   color-scheme: light;
   font-family: "Inter", "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
-  color: #152033;
-  background: #f8faff;
+  color: #162338;
+  background:
+    radial-gradient(circle at top left, rgba(29, 78, 216, 0.18), transparent 32%),
+    radial-gradient(circle at top right, rgba(15, 118, 110, 0.14), transparent 28%),
+    linear-gradient(180deg, #f5f8ff 0%, #eef4ff 48%, #f8fbff 100%);
 }
 
 * {
@@ -19,4 +22,8 @@ body {
   margin: 0;
   min-width: 320px;
   background: inherit;
+}
+
+a {
+  color: inherit;
 }

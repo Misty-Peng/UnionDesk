@@ -154,6 +154,50 @@ public class AuthService {
                 defaultBusinessDomainId);
     }
 
+    public AuthDtos.RefreshResponse refreshToken(String refreshToken) {
+        UserContext oldContext;
+        try {
+            oldContext = jwtTokenService.parseRefreshToken(refreshToken);
+        } catch (IllegalArgumentException ex) {
+            throw new AuthenticationFailedException("invalid refresh token");
+        }
+        if (!loginSessionService.validateAndTouch(oldContext.sessionId(), oldContext.clientCode())) {
+            throw new AuthenticationFailedException("session expired or revoked");
+        }
+        String newAccessToken = jwtTokenService.issueAccessToken(oldContext);
+        String newRefreshToken = jwtTokenService.issueRefreshToken(oldContext);
+        return new AuthDtos.RefreshResponse(
+                newAccessToken,
+                newRefreshToken,
+                "Bearer",
+                jwtTokenService.accessTokenTtl().toSeconds());
+    }
+
+    public AuthDtos.CurrentUserResponse currentUser(UserContext context) {
+        LoginAccount account = loginAccountService.findById(context.userId())
+                .orElseThrow(() -> new AuthenticationFailedException("account not found"));
+        List<String> roles = iamService.listUserRoleCodesByClient(context.userId(), context.clientCode());
+        return new AuthDtos.CurrentUserResponse(
+                account.id(),
+                account.username(),
+                account.mobile(),
+                account.email(),
+                context.role(),
+                context.clientCode(),
+                context.businessDomainId(),
+                roles);
+    }
+
+    public AuthDtos.StepUpResponse stepUp(UserContext context, String password) {
+        LoginAccount account = loginAccountService.findById(context.userId())
+                .orElseThrow(() -> new AuthenticationFailedException("account not found"));
+        if (!passwordEncoder.matches(password, account.passwordHash())) {
+            throw new AuthenticationFailedException("invalid credentials");
+        }
+        String stepUpToken = UUID.randomUUID().toString();
+        return new AuthDtos.StepUpResponse(stepUpToken, "session_15m", 900);
+    }
+
     public AuthDtos.SessionView currentSession(UserContext context) {
         return new AuthDtos.SessionView(
                 context.userId(),

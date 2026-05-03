@@ -13,9 +13,10 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
     <ConfigProvider
       theme={{
         token: {
-          colorPrimary: "#1677ff",
-          borderRadius: 12,
-          fontFamily: '"Inter", "PingFang SC", "Microsoft YaHei", sans-serif'
+          colorPrimary: "#1d4ed8",
+          colorInfo: "#0f766e",
+          borderRadius: 16,
+          fontFamily: '"Inter", "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif'
         },
         algorithm: theme.defaultAlgorithm
       }}

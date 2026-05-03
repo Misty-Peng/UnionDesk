@@ -33,8 +33,22 @@ public final class PermissionCodes {
     public static final String DOMAIN_NOTIFICATION_TEMPLATE_UPDATE = "domain.notification_template.update";
 
     public static final String TICKET_READ = "ticket.read";
+    public static final String TICKET_CREATE = "ticket.create";
+    public static final String TICKET_VIEW_SELF = "ticket.view.self";
+    public static final String TICKET_VIEW_DOMAIN_ALL = "ticket.view.domain_all";
+    public static final String TICKET_CLAIM = "ticket.claim";
     public static final String TICKET_ASSIGN = "ticket.assign";
+    public static final String TICKET_REPLY_SELF = "ticket.reply.self";
+    public static final String TICKET_REPLY = "ticket.reply";
     public static final String TICKET_CLOSE = "ticket.close";
+    public static final String TICKET_WITHDRAW_SELF = "ticket.withdraw.self";
+    public static final String TICKET_MERGE = "ticket.merge";
+
+    public static final String ATTACHMENT_UPLOAD = "attachment.upload";
+    public static final String ATTACHMENT_DOWNLOAD = "attachment.download";
+
+    public static final String INBOX_READ = "inbox.read";
+    public static final String INBOX_MARK_READ = "inbox.mark_read";
 
     public static final String CONSULTATION_REPLY = "consultation.reply";
 

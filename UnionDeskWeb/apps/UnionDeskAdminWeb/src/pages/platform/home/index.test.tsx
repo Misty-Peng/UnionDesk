@@ -1,6 +1,7 @@
 import type { PlatformOverview } from "#src/api/platform/overview";
 
 import { render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
@@ -61,7 +62,11 @@ describe("PlatformHome", () => {
 	it("loads real overview stats and renders audit items", async () => {
 		mocks.fetchPlatformOverview.mockResolvedValue(overview);
 
-		render(<PlatformHome />);
+		render(
+			<MemoryRouter>
+				<PlatformHome />
+			</MemoryRouter>,
+		);
 
 		await waitFor(() => expect(mocks.fetchPlatformOverview).toHaveBeenCalledTimes(1));
 		expect(await screen.findByText("3")).toBeInTheDocument();
@@ -76,7 +81,11 @@ describe("PlatformHome", () => {
 	it("shows a fallback error when overview loading fails", async () => {
 		mocks.fetchPlatformOverview.mockRejectedValue(new Error("network"));
 
-		render(<PlatformHome />);
+		render(
+			<MemoryRouter>
+				<PlatformHome />
+			</MemoryRouter>,
+		);
 
 		expect(await screen.findByText("平台首页统计加载失败，请稍后重试。")).toBeInTheDocument();
 	});

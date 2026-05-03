@@ -117,4 +117,36 @@ public final class AuthDtos {
             String userAgent,
             LocalDateTime createdAt) {
     }
+
+    public record RefreshRequest(
+            @NotBlank String refreshToken) {
+    }
+
+    public record RefreshResponse(
+            String accessToken,
+            String refreshToken,
+            String tokenType,
+            long expiresInSeconds) {
+    }
+
+    public record StepUpRequest(
+            @NotBlank String password) {
+    }
+
+    public record StepUpResponse(
+            String stepUpToken,
+            String mode,
+            long expiresInSeconds) {
+    }
+
+    public record CurrentUserResponse(
+            long userId,
+            String username,
+            String mobile,
+            String email,
+            String role,
+            String clientCode,
+            Long businessDomainId,
+            List<String> roles) {
+    }
 }

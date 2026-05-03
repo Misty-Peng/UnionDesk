@@ -2,7 +2,21 @@ import type { AppRouteRecordRaw } from "#src/router/types";
 
 import { platformHomePath, platformPath } from "#src/router/extra-info";
 
-import { ApartmentOutlined, AppstoreOutlined, DashboardOutlined, ImportOutlined, MenuOutlined, TeamOutlined, UserDeleteOutlined, UserOutlined } from "@ant-design/icons";
+import {
+	ApartmentOutlined,
+	AppstoreOutlined,
+	DashboardOutlined,
+	GlobalOutlined,
+	ImportOutlined,
+	MailOutlined,
+	MenuOutlined,
+	PaperClipOutlined,
+	SolutionOutlined,
+	TeamOutlined,
+	UserAddOutlined,
+	UserDeleteOutlined,
+	UserOutlined,
+} from "@ant-design/icons";
 import { createElement, lazy } from "react";
 
 import ContainerLayout from "#src/layout/container-layout";
@@ -12,6 +26,11 @@ const PlatformUser = lazy(() => import("#src/pages/platform/user"));
 const PlatformDept = lazy(() => import("#src/pages/platform/dept"));
 const PlatformOffboardPool = lazy(() => import("#src/pages/platform/offboard-pool"));
 const PlatformImportExport = lazy(() => import("#src/pages/platform/import-export"));
+const PlatformDomains = lazy(() => import("#src/pages/platform/domains"));
+const PlatformTicketPool = lazy(() => import("#src/pages/platform/ticket-pool"));
+const PlatformInbox = lazy(() => import("#src/pages/platform/inbox"));
+const PlatformAttachments = lazy(() => import("#src/pages/platform/attachments"));
+const PlatformDomainOnboarding = lazy(() => import("#src/pages/platform/domain-onboarding"));
 const PlatformRole = lazy(() => import("#src/pages/system/role"));
 const PlatformMenu = lazy(() => import("#src/pages/system/menu"));
 
@@ -89,6 +108,51 @@ const routes: AppRouteRecordRaw[] = [
 						"permission:button:add",
 						"permission:button:update",
 					],
+				},
+			},
+			{
+				path: `${platformPath}/domains`,
+				Component: PlatformDomains,
+				handle: {
+					title: "业务域管理",
+					icon: createElement(GlobalOutlined),
+					roles: ["admin"],
+				},
+			},
+			{
+				path: `${platformPath}/domain-onboarding`,
+				Component: PlatformDomainOnboarding,
+				handle: {
+					title: "客户入域",
+					icon: createElement(UserAddOutlined),
+					roles: ["admin"],
+				},
+			},
+			{
+				path: `${platformPath}/ticket-pool`,
+				Component: PlatformTicketPool,
+				handle: {
+					title: "工单池",
+					icon: createElement(SolutionOutlined),
+					roles: ["admin"],
+				},
+			},
+			{
+				path: `${platformPath}/inbox`,
+				Component: PlatformInbox,
+				handle: {
+					title: "站内信",
+					icon: createElement(MailOutlined),
+					roles: ["admin"],
+				},
+			},
+			{
+				path: `${platformPath}/attachments`,
+				Component: PlatformAttachments,
+				handle: {
+					title: "附件",
+					icon: createElement(PaperClipOutlined),
+					roles: ["admin"],
 				},
 			},
 			{

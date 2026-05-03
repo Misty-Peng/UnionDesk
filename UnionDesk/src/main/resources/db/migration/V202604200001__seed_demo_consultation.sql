@@ -1,3 +1,12 @@
+-- 演示员工账号：必须在 user_global_role 等外键写入前存在（空库仅有 V2 的 id=1 客户账号）
+INSERT INTO user_account (id, mobile, email, password_hash, status)
+VALUES (2, '13900000000', 'agent@uniondesk.local', '{noop}agent123', 1)
+ON DUPLICATE KEY UPDATE
+    mobile = VALUES(mobile),
+    email = VALUES(email),
+    password_hash = VALUES(password_hash),
+    status = VALUES(status);
+
 INSERT INTO user_global_role (user_id, role_id)
 SELECT 2, id FROM role WHERE code = 'super_admin'
 ON DUPLICATE KEY UPDATE user_id = VALUES(user_id), role_id = VALUES(role_id);

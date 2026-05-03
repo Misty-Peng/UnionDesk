@@ -30,6 +30,29 @@ class JwtTokenServiceTests {
     }
 
     @Test
+    void issueAndParseRefreshToken() {
+        UserContext expected = new UserContext(42L, "super_admin", 7L, "sid-42", "ud-admin-web");
+        String token = jwtTokenService.issueRefreshToken(expected);
+        assertThat(token).contains(".");
+        UserContext actual = jwtTokenService.parseRefreshToken(token);
+        assertThat(actual).isEqualTo(expected);
+    }
+
+    @Test
+    void parseAccessTokenRejectsRefreshToken() {
+        String refreshToken = jwtTokenService.issueRefreshToken(new UserContext(1L, "agent", 1L, "sid-1", "ud-admin-web"));
+        assertThatThrownBy(() -> jwtTokenService.parseAccessToken(refreshToken))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void parseRefreshTokenRejectsAccessToken() {
+        String accessToken = jwtTokenService.issueAccessToken(new UserContext(1L, "agent", 1L, "sid-1", "ud-admin-web"));
+        assertThatThrownBy(() -> jwtTokenService.parseRefreshToken(accessToken))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
     void rejectTamperedAccessToken() {
         String token = jwtTokenService.issueAccessToken(new UserContext(42L, "agent", 7L, "sid-42", "ud-admin-web"));
         String[] parts = token.split("\\.");

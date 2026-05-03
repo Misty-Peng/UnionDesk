@@ -37,7 +37,21 @@ import type {
   UpdateIamUserPayload,
   UpdateMenuPayload,
   UpdateRolePayload,
-  UpdateRolePermissionsPayload
+  UpdateRolePermissionsPayload,
+  P0PageResult,
+  P0AdminDomain,
+  P0CreateAdminDomainPayload,
+  P0UpdateAdminDomainPayload,
+  P0StepUpRequest,
+  P0StepUpResponse,
+  P0InboxPageResponse,
+  P0AdminTicketListItem,
+  P0InvitationCode,
+  P0DomainCustomer,
+  P0AttachmentPresignRequest,
+  P0AttachmentPresignResponse,
+  P0AttachmentLocalUploadResponse,
+  P0VisibilityPolicyCode
 } from "./types";
 import {
   clearAuthSession,
@@ -668,6 +682,255 @@ export async function fetchOffboardPoolUsers(): Promise<IamUser[]> {
 export async function deleteUser(userId: number): Promise<void> {
   try {
     await api.delete(`/iam/users/${userId}`);
+  } catch (error) {
+    throw toError(error);
+  }
+}
+
+function toP0VisibilityList(legacy?: string | null): P0VisibilityPolicyCode[] {
+  if (!legacy || legacy.trim() === "") {
+    return ["public"];
+  }
+  const v = legacy.trim();
+  if (v === "public" || v === "domain_customer_only" || v === "channel_only") {
+    return [v];
+  }
+  return ["public"];
+}
+
+function legacyDomainToP0(row: BusinessDomainView): P0AdminDomain {
+  return {
+    id: String(row.id),
+    code: row.code,
+    name: row.name,
+    visibility_policy_codes: toP0VisibilityList(row.visibilityPolicy),
+    registration_policy: "open",
+    status: row.status != null ? String(row.status) : undefined,
+    created_at: undefined
+  };
+}
+
+/** P0：`POST /api/v1/auth/step-up` */
+export async function postAuthStepUp(payload: P0StepUpRequest): Promise<P0StepUpResponse> {
+  try {
+    const response = await api.post<P0StepUpResponse>("/auth/step-up", payload);
+    return unwrapApiResponse(response.data);
+  } catch (error) {
+    throw toError(error);
+  }
+}
+
+type P0RequestOptions = {
+  stepUpToken?: string;
+};
+
+function withStepUpHeaders(options?: P0RequestOptions): { headers?: Record<string, string> } {
+  if (!options?.stepUpToken) {
+    return {};
+  }
+  return { headers: { "X-UD-Step-Up-Token": options.stepUpToken } };
+}
+
+/** P0：`GET /api/v1/admin/domains`；404 时回退到演示 `GET /domains` 并映射为分页结构 */
+export async function fetchP0AdminDomainsPage(params: {
+  page: number;
+  page_size: number;
+  status?: string;
+  keyword?: string;
+}): Promise<P0PageResult<P0AdminDomain>> {
+  try {
+    const response = await api.get<P0PageResult<P0AdminDomain>>("/admin/domains", { params });
+    return unwrapApiResponse(response.data);
+  } catch (error) {
+    if (axios.isAxiosError(error) && error.response?.status === 404) {
+      const legacy = await fetchDomains();
+      const list = legacy.map(legacyDomainToP0);
+      return { total: list.length, list };
+    }
+    throw toError(error);
+  }
+}
+
+/** P0：`POST /api/v1/admin/domains` */
+export async function createP0AdminDomain(payload: P0CreateAdminDomainPayload): Promise<{ id: string; code: string }> {
+  try {
+    const response = await api.post<{ id: string; code: string }>("/admin/domains", payload);
+    return unwrapApiResponse(response.data);
+  } catch (error) {
+    throw toError(error);
+  }
+}
+
+/** P0：`PUT /api/v1/admin/domains/{domain_id}` */
+export async function updateP0AdminDomain(domainId: string, payload: P0UpdateAdminDomainPayload): Promise<void> {
+  try {
+    await api.put(`/admin/domains/${encodeURIComponent(domainId)}`, payload);
+  } catch (error) {
+    throw toError(error);
+  }
+}
+
+/** P0：`DELETE /api/v1/admin/domains/{domain_id}`（需 one_time step-up） */
+export async function deleteP0AdminDomain(domainId: string, options?: P0RequestOptions): Promise<void> {
+  try {
+    await api.delete(`/admin/domains/${encodeURIComponent(domainId)}`, {
+      ...withStepUpHeaders(options)
+    });
+  } catch (error) {
+    throw toError(error);
+  }
+}
+
+/** P0：`GET /api/v1/admin/domains/{domain_id}/tickets`；404 时回退到演示工单列表 */
+export async function fetchP0AdminDomainTicketsPage(params: {
+  domainId: string;
+  page: number;
+  page_size: number;
+  status?: string;
+  keyword?: string;
+}): Promise<P0PageResult<P0AdminTicketListItem>> {
+  const { domainId, page, page_size, status, keyword } = params;
+  try {
+    const response = await api.get<P0PageResult<P0AdminTicketListItem>>(
+      `/admin/domains/${encodeURIComponent(domainId)}/tickets`,
+      { params: { page, page_size, status, keyword } }
+    );
+    return unwrapApiResponse(response.data);
+  } catch (error) {
+    if (axios.isAxiosError(error) && error.response?.status === 404) {
+      const rows = await fetchTickets();
+      const list: P0AdminTicketListItem[] = rows.map((t) => ({
+        id: String(t.id),
+        ticket_no: t.ticketNo,
+        title: t.title,
+        type_name: null,
+        status: String(t.status),
+        priority: t.priority,
+        assignee_name: null,
+        sla_status: null,
+        created_at: t.createdAt,
+        updated_at: t.createdAt
+      }));
+      return { total: list.length, list };
+    }
+    throw toError(error);
+  }
+}
+
+/** P0：`POST /api/v1/admin/domains/{domain_id}/tickets/{ticket_id}/claim` */
+export async function claimP0AdminTicket(domainId: string, ticketId: string): Promise<void> {
+  try {
+    await api.post(`/admin/domains/${encodeURIComponent(domainId)}/tickets/${encodeURIComponent(ticketId)}/claim`);
+  } catch (error) {
+    throw toError(error);
+  }
+}
+
+/** P0：`GET /api/v1/inbox`；404 时返回空列表 */
+export async function fetchP0InboxPage(params: {
+  page: number;
+  page_size: number;
+  is_read?: boolean;
+  domain_id?: string;
+}): Promise<P0InboxPageResponse> {
+  try {
+    const response = await api.get<P0InboxPageResponse>("/inbox", { params });
+    return unwrapApiResponse(response.data);
+  } catch (error) {
+    if (axios.isAxiosError(error) && error.response?.status === 404) {
+      return { total: 0, unread_count: 0, list: [] };
+    }
+    throw toError(error);
+  }
+}
+
+/** P0：`GET /api/v1/inbox/unread-count` */
+export async function fetchP0InboxUnreadCount(): Promise<number> {
+  try {
+    const response = await api.get<{ count: number }>("/inbox/unread-count");
+    const data = unwrapApiResponse(response.data);
+    return typeof data.count === "number" ? data.count : 0;
+  } catch (error) {
+    if (axios.isAxiosError(error) && error.response?.status === 404) {
+      return 0;
+    }
+    throw toError(error);
+  }
+}
+
+/** P0：`PUT /api/v1/inbox/{message_id}/read` */
+export async function markP0InboxMessageRead(messageId: string): Promise<void> {
+  try {
+    await api.put(`/inbox/${encodeURIComponent(messageId)}/read`);
+  } catch (error) {
+    throw toError(error);
+  }
+}
+
+/** P0：`GET .../invitation-codes`；404 返回空 */
+export async function fetchP0InvitationCodes(domainId: string): Promise<P0PageResult<P0InvitationCode>> {
+  try {
+    const response = await api.get<P0PageResult<P0InvitationCode>>(
+      `/admin/domains/${encodeURIComponent(domainId)}/invitation-codes`
+    );
+    return unwrapApiResponse(response.data);
+  } catch (error) {
+    if (axios.isAxiosError(error) && error.response?.status === 404) {
+      return { total: 0, list: [] };
+    }
+    throw toError(error);
+  }
+}
+
+/** P0：`GET .../customers`；404 返回空 */
+export async function fetchP0DomainCustomersPage(params: {
+  domainId: string;
+  page: number;
+  page_size: number;
+  status?: string;
+  keyword?: string;
+}): Promise<P0PageResult<P0DomainCustomer>> {
+  const { domainId, page, page_size, status, keyword } = params;
+  try {
+    const response = await api.get<P0PageResult<P0DomainCustomer>>(
+      `/admin/domains/${encodeURIComponent(domainId)}/customers`,
+      { params: { page, page_size, status, keyword } }
+    );
+    return unwrapApiResponse(response.data);
+  } catch (error) {
+    if (axios.isAxiosError(error) && error.response?.status === 404) {
+      return { total: 0, list: [] };
+    }
+    throw toError(error);
+  }
+}
+
+/** P0：`POST /api/v1/attachments/presign` */
+export async function presignP0Attachment(payload: P0AttachmentPresignRequest): Promise<P0AttachmentPresignResponse> {
+  try {
+    const response = await api.post<P0AttachmentPresignResponse>("/attachments/presign", payload);
+    return unwrapApiResponse(response.data);
+  } catch (error) {
+    throw toError(error);
+  }
+}
+
+/** P0：`POST /api/v1/attachments/upload`（multipart） */
+export async function uploadP0AttachmentLocal(
+  form: FormData
+): Promise<P0AttachmentLocalUploadResponse> {
+  try {
+    const response = await api.post<P0AttachmentLocalUploadResponse>("/attachments/upload", form);
+    return unwrapApiResponse(response.data);
+  } catch (error) {
+    throw toError(error);
+  }
+}
+
+/** P0：`PUT /api/v1/attachments/{attachment_id}/confirm` */
+export async function confirmP0Attachment(attachmentId: string): Promise<void> {
+  try {
+    await api.put(`/attachments/${encodeURIComponent(attachmentId)}/confirm`);
   } catch (error) {
     throw toError(error);
   }

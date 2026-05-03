@@ -55,6 +55,10 @@ public class JwtTokenService {
         return parseToken(token, "access");
     }
 
+    public UserContext parseRefreshToken(String token) {
+        return parseToken(token, "refresh");
+    }
+
     public Duration accessTokenTtl() {
         return accessTokenTtl;
     }
